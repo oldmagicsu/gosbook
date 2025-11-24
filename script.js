@@ -1,6 +1,9 @@
 // Bungie API 配置
 const BUNGIE_API_KEY = '6d25ddf85f144bdf91f0ad85c78b6243';
 const CLIENT_ID = '51061';
+// 用户登录页面URL
+const SIGNIN_URL = 'https://www.bungie.net/7/zh-chs/User/SignIn';
+// OAuth授权URL（使用中文路径）
 const AUTH_URL = 'https://www.bungie.net/zh-chs/OAuth/Authorize';
 const REDIRECT_URI = window.location.origin + window.location.pathname;
 
@@ -62,7 +65,10 @@ function createAuthUrl() {
     const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     localStorage.setItem('authState', state);
     
-    return `${AUTH_URL}?client_id=${CLIENT_ID}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+    // 使用正确的OAuth授权URL，包含所有必要参数
+    const authUrl = `${AUTH_URL}?client_id=${CLIENT_ID}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+    console.log('生成的OAuth授权URL:', authUrl);
+    return authUrl;
 }
 
 // 处理授权回调
@@ -112,6 +118,10 @@ async function handleAuthCallback() {
             
             // 恢复登录前的UI状态
             updateUIBeforeLogin();
+        } finally {
+            // 无论成功失败都隐藏加载指示器
+            showLoading(false);
+        }
         } finally {
             showLoading(false);
         }
@@ -280,6 +290,18 @@ function hideErrorMessage() {
 
 // 初始化应用
 function init() {
+    // 检查是否有登录后的动作需要执行
+    const postLoginAction = localStorage.getItem('postLoginAction');
+    if (postLoginAction === 'oauth') {
+        console.log('检测到登录后需要执行OAuth授权');
+        localStorage.removeItem('postLoginAction');
+        // 登录后直接进行OAuth授权
+        const authUrl = createAuthUrl();
+        console.log('登录后重定向到OAuth授权:', authUrl);
+        window.location.href = authUrl;
+        return;
+    }
+    
     // 清除可能存在的旧数据，确保干净的登录状态
     clearToken();
     localStorage.removeItem('userMembership');
@@ -296,8 +318,17 @@ function init() {
     
     // 绑定登录按钮事件
     loginBtn.addEventListener('click', () => {
-        console.log('登录按钮被点击，跳转到Bungie授权页面');
-        window.location.href = createAuthUrl();
+        console.log('登录按钮被点击，准备跳转到Bungie登录页面');
+        try {
+            // 首先跳转到用户登录页面
+            console.log('即将跳转到Bungie登录页面:', SIGNIN_URL);
+            // 在登录后回调中会处理OAuth授权
+            localStorage.setItem('postLoginAction', 'oauth');
+            window.location.href = SIGNIN_URL;
+        } catch (error) {
+            console.error('跳转登录页面时出错:', error);
+            showErrorMessage('登录失败，请刷新页面重试');
+        }
     });
     
     // 绑定登出按钮事件
