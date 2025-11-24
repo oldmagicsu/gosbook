@@ -1,984 +1,798 @@
-// Bungie API 配置
-const BUNGIE_API_KEY = '6d25ddf85f144bdf91f0ad85c78b6243';
+// DOM元素引用
+const loginButton = document.getElementById('login-button');
+const logoutButton = document.getElementById('logout-button');
+const loginSection = document.getElementById('login-section');
+const userInfoSection = document.getElementById('user-info-section');
+const clanSection = document.getElementById('clan-section');
+const onlineStatusSection = document.getElementById('online-status-section');
+const raidDataSection = document.getElementById('raid-data-section');
+const loadingIndicator = document.getElementById('loading-indicator');
+const loadingText = document.getElementById('loading-text');
+const loginError = document.getElementById('login-error');
+const userAvatar = document.getElementById('user-avatar');
+const userName = document.getElementById('user-name');
+const userMembershipId = document.getElementById('user-membership-id');
+const userStatus = document.getElementById('user-status');
+const clanName = document.getElementById('clan-name');
+const clanMembers = document.getElementById('clan-members');
+const clanDescription = document.getElementById('clan-description');
+const onlineFriends = document.getElementById('online-friends');
+const raidCompletions = document.getElementById('raid-completions');
+
+// 应用配置
+const API_KEY = '6d25ddf85f144bdf91f0ad85c78b6243';
 const CLIENT_ID = '51061';
-// OAuth授权URL（使用中文路径）
-const AUTH_URL = 'https://www.bungie.net/zh-chs/OAuth/Authorize';
-const REDIRECT_URI = window.location.origin + window.location.pathname;
+const BUNGIE_AUTH_URL = 'https://www.bungie.net/zh-chs/OAuth/Authorize';
+const BUNGIE_API_URL = 'https://www.bungie.net/Platform';
 
-// 全局错误处理
-window.onerror = function(message, source, lineno, colno, error) {
-    console.error('全局错误:', message, '行号:', lineno, '错误:', error);
-    return true;
-};
+// 生成随机的state参数用于CSRF保护
+function generateState() {
+    const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    console.log('生成的State:', state);
+    return state;
+}
 
-// DOM 元素 - 初始为null，在DOM加载完成后再获取
-let loginBtn = null;
-let logoutBtn = null;
-let loginSection = null;
-let userInfoSection = null;
-let raidStatsSection = null;
-let loadingOverlay = null;
-let userNameElement = null;
-let userMembershipElement = null;
+// 保存state到localStorage
+function saveState(state) {
+    console.log('保存State到localStorage:', state);
+    localStorage.setItem('bungie_auth_state', state);
+}
 
-// Token 管理函数
-function getStoredToken() {
-    const tokenData = localStorage.getItem('bungieToken');
-    if (!tokenData) return null;
+// 从localStorage获取保存的state
+function getSavedState() {
+    const state = localStorage.getItem('bungie_auth_state');
+    console.log('从localStorage获取的State:', state);
+    return state;
+}
+
+// 清除保存的state
+function clearState() {
+    console.log('清除localStorage中的State');
+    localStorage.removeItem('bungie_auth_state');
+}
+
+// 构建授权URL
+function buildAuthUrl() {
+    const state = generateState();
+    saveState(state);
     
-    const parsed = JSON.parse(tokenData);
-    // 检查token是否过期
-    if (parsed.expiresAt && Date.now() > parsed.expiresAt) {
-        localStorage.removeItem('bungieToken');
-        return null;
+    const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
+    const authUrl = `${BUNGIE_AUTH_URL}?client_id=${CLIENT_ID}&response_type=code&state=${state}&redirect_uri=${redirectUri}`;
+    console.log('构建的授权URL:', authUrl);
+    return authUrl;
+}
+
+// 打开授权窗口
+function openAuthWindow() {
+    const authUrl = buildAuthUrl();
+    const width = 600;
+    const height = 700;
+    const left = (window.innerWidth / 2) - (width / 2);
+    const top = (window.innerHeight / 2) - (height / 2);
+    
+    // 打开一个居中的弹出窗口
+    const authWindow = window.open(authUrl, 'Bungie授权', `width=${width},height=${height},left=${left},top=${top}`);
+    
+    // 确保窗口正确居中
+    if (authWindow && !authWindow.closed) {
+        // 尝试再次设置位置，确保跨浏览器兼容性
+        setTimeout(() => {
+            if (authWindow && !authWindow.closed) {
+                authWindow.moveTo(left, top);
+            }
+        }, 10);
     }
-    return parsed;
 }
 
-function storeToken(tokenData) {
-    // 计算过期时间（假设token有效期为1小时）
-    const expiresAt = Date.now() + (3600 * 1000);
-    localStorage.setItem('bungieToken', JSON.stringify({
-        ...tokenData,
-        expiresAt
-    }));
-}
-
-function clearToken() {
-    localStorage.removeItem('bungieToken');
-}
-
-// 解析URL参数
-function getUrlParams() {
+// 从URL获取查询参数
+function getQueryParams() {
+    console.log('当前URL:', window.location.href);
     const params = {};
     const queryString = window.location.search.substring(1);
-    const queryParts = queryString.split('&');
+    console.log('查询字符串:', queryString);
+    const pairs = queryString.split('&');
     
-    for (let part of queryParts) {
-        const [key, value] = part.split('=');
-        if (key && value) {
-            params[decodeURIComponent(key)] = decodeURIComponent(value);
+    for (let pair of pairs) {
+        const [key, value] = pair.split('=');
+        if (key) {
+            const decodedKey = decodeURIComponent(key);
+            const decodedValue = decodeURIComponent(value || '');
+            params[decodedKey] = decodedValue;
+            console.log(`解析参数: ${decodedKey}=${decodedValue}`);
         }
     }
     
     return params;
 }
 
-// 创建OAuth授权URL
-function createAuthUrl() {
-    console.log('创建OAuth授权URL...');
-    // 生成随机state参数防止CSRF攻击
-    const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    localStorage.setItem('authState', state);
+// 检查URL是否包含授权回调参数
+function checkForAuthCallback() {
+    console.log('检查授权回调...');
+    const params = getQueryParams();
     
-    // 参数验证
-    if (!CLIENT_ID || !AUTH_URL || !REDIRECT_URI) {
-        throw new Error('缺少必要的OAuth配置参数');
-    }
-    
-    // 构建URL - 确保正确编码所有参数
-    const params = new URLSearchParams();
-    params.append('client_id', CLIENT_ID);
-    params.append('response_type', 'code');
-    params.append('state', state);
-    params.append('redirect_uri', REDIRECT_URI);
-    
-    const url = `${AUTH_URL}?${params.toString()}`;
-    console.log('创建的授权URL:', url);
-    return url;
-}
-
-// 处理授权回调
-async function handleAuthCallback() {
-    console.log('检查URL中是否包含授权码...');
-    const params = getUrlParams();
-    
-    // 如果URL包含code参数，表示是从授权页面重定向回来的
+    // 如果有code参数，说明是从Bungie授权页面重定向回来的
     if (params.code) {
-        showLoading(true);
-        
+        console.log('发现授权码，开始处理...');
         try {
             // 验证state参数
-            const storedState = localStorage.getItem('authState');
-            if (params.state !== storedState) {
-                throw new Error('State验证失败，可能是CSRF攻击');
-            }
-            localStorage.removeItem('authState');
+            const receivedState = params.state;
+            const savedState = getSavedState();
             
-            // 使用code换取token
-            console.log('使用授权码获取访问令牌...');
-            const tokenResponse = await exchangeCodeForToken(params.code);
+            console.log('接收到的State:', receivedState);
+            console.log('保存的State:', savedState);
             
-            if (tokenResponse.access_token) {
-                storeToken(tokenResponse);
-                
-                // 清除URL中的参数，避免重复处理
-                window.history.replaceState({}, document.title, window.location.pathname);
-                
-                // 获取并显示用户信息
-                console.log('获取并显示用户信息...');
-                await fetchUserInfo();
-                
-                // 获取并显示Raid数据
-                console.log('获取并显示Raid数据...');
-                await fetchRaidData();
-                
-                // 显示用户信息和数据区域
-                console.log('更新UI为登录后状态');
-                updateUIAfterLogin();
-                console.log('登录成功！');
-            } else {
-                throw new Error('未获取到有效的访问令牌');
+            // 检查state参数是否匹配
+            if (!receivedState) {
+                throw new Error('State参数缺失');
+            } else if (!savedState) {
+                throw new Error('未找到保存的State');
+            } else if (receivedState !== savedState) {
+                throw new Error('State值不匹配');
             }
+            
+            console.log('State验证成功!');
+            // 验证成功后清除保存的state
+            clearState();
+            
+            // 从回调中移除参数，避免刷新页面时重复处理
+            const urlWithoutParams = window.location.origin + window.location.pathname;
+            window.history.replaceState({}, document.title, urlWithoutParams);
+            
+            // 获取授权码并处理
+            const authorizationCode = params.code;
+            console.log('处理授权码:', authorizationCode.substring(0, 10) + '...');
+            handleAuthCode(authorizationCode);
+            
+            return true;
         } catch (error) {
-            console.error('授权处理失败:', error);
-            
-            // 清除可能存在的部分数据
-            clearToken();
-            localStorage.removeItem('userMembership');
-            
-            // 显示更具体的错误信息，使用专门的错误消息函数
-            showErrorMessage(`登录失败: ${error.message}`);
-            
-            // 恢复登录前的UI状态
-            updateUIBeforeLogin();
-        } finally {
-            console.log('隐藏加载指示器');
-            // 无论成功失败都隐藏加载指示器
-            showLoading(false);
+            console.error('授权回调处理失败:', error);
+            // 显示具体错误，而不是CSRF攻击提示
+            showError('授权失败: ' + error.message);
+            return false;
         }
     }
+    
+    return false;
 }
 
-// 使用授权码换取访问令牌
-async function exchangeCodeForToken(code) {
-    console.log('开始使用授权码换取访问令牌');
-    const response = await fetch('https://www.bungie.net/Platform/App/OAuth/Token/', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-API-Key': BUNGIE_API_KEY
-        },
-        body: new URLSearchParams({
-            client_id: CLIENT_ID,
-            code: code,
-            grant_type: 'authorization_code'
-        })
-    });
-    
-    console.log('Token请求响应状态:', response.status);
-    
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Token请求失败:', errorData);
-        throw new Error(`登录失败: ${response.status} - ${errorData.Message || '请检查您的Bungie账号权限和API配置'}`);
+// 显示通知消息，支持不同类型的通知（成功、错误、信息）
+function showNotification(message, type = 'info') {
+    // 检查通知元素是否存在，不存在则创建
+    let notification = document.getElementById('notification');
+    if (!notification) {
+        notification = document.createElement('div');
+        notification.id = 'notification';
+        notification.className = 'notification';
+        notification.style.position = 'fixed';
+        notification.style.top = '20px';
+        notification.style.right = '20px';
+        notification.style.padding = '10px 15px';
+        notification.style.borderRadius = '4px';
+        notification.style.zIndex = '10000';
+        notification.style.fontFamily = 'Arial, sans-serif';
+        notification.style.fontSize = '14px';
+        notification.style.boxShadow = '0 2px 5px rgba(0, 0, 0, 0.2)';
+        notification.style.transition = 'all 0.3s ease';
+        document.body.appendChild(notification);
     }
     
-    const tokenData = await response.json();
-    console.log('成功获取到访问令牌');
-    return tokenData;
-}
-
-// 获取用户信息
-async function fetchUserInfo() {
-    try {
-        console.log('开始获取用户信息');
-        const tokenData = getStoredToken();
-        
-        if (!tokenData) {
-            console.error('未找到有效token');
-            throw new Error('未找到有效token');
-        }
-        
-        console.log('使用token获取用户membership信息');
-        // 首先获取当前用户的membership信息
-        const membershipResponse = await fetch('https://www.bungie.net/Platform/User/GetMembershipsForCurrentUser/', {
-            headers: {
-                'X-API-Key': BUNGIE_API_KEY,
-                'Authorization': `Bearer ${tokenData.access_token}`
-            }
-        });
-        
-        console.log('membership请求响应状态:', membershipResponse.status);
-        
-        if (!membershipResponse.ok) {
-            const errorData = await membershipResponse.json().catch(() => ({}));
-            console.error('获取用户信息失败:', errorData);
-            throw new Error(`获取用户信息失败: ${membershipResponse.status} - ${errorData.Message || '请检查您的Bungie账号权限'}`);
-        }
-        
-        const data = await membershipResponse.json();
-        console.log('获取到的membership数据:', data);
-        
-        if (!data.Response || !data.Response.destinyMemberships || data.Response.destinyMemberships.length === 0) {
-            console.error('未找到destinyMemberships数据');
-            throw new Error('未找到有效的Destiny账号');
-        }
-        
-        // 优先使用Destiny 2的账号
-        const destiny2Membership = data.Response.destinyMemberships.find(m => m.membershipType === 3 || m.membershipType === 1 || m.membershipType === 4);
-        
-        if (!destiny2Membership) {
-            console.error('未找到Destiny 2账号');
-            throw new Error('未找到有效的Destiny 2账号');
-        }
-        
-        console.log('找到Destiny 2账号:', destiny2Membership.displayName);
-        userNameElement.textContent = destiny2Membership.displayName;
-        userMembershipElement.textContent = `会员类型: ${getMembershipTypeName(destiny2Membership.membershipType)}`;
-        
-        // 存储membership信息供后续API调用使用
-        localStorage.setItem('userMembership', JSON.stringify({
-            membershipId: destiny2Membership.membershipId,
-            membershipType: destiny2Membership.membershipType
-        }));
-        
-        return destiny2Membership;
-    } catch (error) {
-        console.error('获取用户信息失败:', error);
-        throw error;
-    }
-}
-
-// 获取会员类型名称
-function getMembershipTypeName(membershipType) {
-    const typeMap = {
-        1: 'Xbox',
-        2: 'PlayStation',
-        3: 'Steam',
-        4: 'Blizzard',
-        5: 'Stadia',
-        10: 'Twitch'
-    };
-    return typeMap[membershipType] || 'Unknown';
-}
-
-// 更新登录后的UI
-function updateUIAfterLogin() {
-    console.log('更新UI为登录后状态');
-    if (loginSection) loginSection.style.display = 'none';
-    if (userInfoSection) userInfoSection.style.display = 'block';
-    if (raidStatsSection) raidStatsSection.style.display = 'block';
-}
-
-// 恢复登录前的UI
-function updateUIBeforeLogin() {
-    console.log('更新UI为登录前状态');
-    if (loginSection) loginSection.style.display = 'block';
-    if (userInfoSection) userInfoSection.style.display = 'none';
-    if (raidStatsSection) raidStatsSection.style.display = 'none';
-}
-
-// 显示/隐藏加载指示器
-function showLoading(show) {
-    console.log(`显示加载状态: ${show}`);
-    if (loadingOverlay) {
-        loadingOverlay.style.display = show ? 'flex' : 'none';
-    }
-}
-
-// 显示错误消息
-function showErrorMessage(message) {
-    console.error(`显示错误消息: ${message}`);
+    // 设置消息内容和样式
+    notification.textContent = message;
     
-    // 检查是否已经有错误消息元素
-    let errorElement = document.getElementById('error-message');
-    
-    if (!errorElement) {
-        // 创建错误消息元素
-        errorElement = document.createElement('div');
-        errorElement.id = 'error-message';
-        errorElement.className = 'error-message';
-        document.body.insertBefore(errorElement, document.body.firstChild);
+    // 根据类型设置不同的背景色
+    switch (type) {
+        case 'success':
+            notification.style.background = 'rgba(76, 175, 80, 0.9)'; // 绿色
+            notification.style.color = 'white';
+            break;
+        case 'error':
+            notification.style.background = 'rgba(244, 67, 54, 0.9)'; // 红色
+            notification.style.color = 'white';
+            break;
+        case 'warning':
+            notification.style.background = 'rgba(255, 193, 7, 0.9)'; // 黄色
+            notification.style.color = 'black';
+            break;
+        case 'info':
+        default:
+            notification.style.background = 'rgba(0, 0, 0, 0.8)'; // 黑色
+            notification.style.color = 'white';
+            break;
     }
     
-    // 设置错误消息内容
-    errorElement.textContent = message;
-    errorElement.style.display = 'block';
+    // 显示通知，带淡入效果
+    notification.style.opacity = '0';
+    notification.style.display = 'block';
     
-    // 5秒后自动隐藏错误消息
+    // 添加淡入效果
     setTimeout(() => {
-        hideErrorMessage();
-    }, 10000); // 10秒后隐藏
+        notification.style.opacity = '1';
+    }, 10);
+    
+    // 3秒后自动隐藏，带淡出效果
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => {
+            notification.style.display = 'none';
+        }, 300);
+    }, 3000);
 }
 
-// 隐藏错误消息
-function hideErrorMessage() {
-    const errorElement = document.getElementById('error-message');
-    if (errorElement) {
-        errorElement.style.display = 'none';
-    }
-}
-
-// 初始化应用
-// 使用DOMContentLoaded事件确保DOM完全加载
-function init() {
-    console.log('DOMContentLoaded事件触发，开始初始化...');
-    
-    // 获取DOM元素
-    console.log('获取DOM元素...');
-    loginBtn = document.getElementById('login-btn');
-    logoutBtn = document.getElementById('logout-btn');
-    loginSection = document.getElementById('login-section');
-    userInfoSection = document.getElementById('user-info');
-    raidStatsSection = document.getElementById('raid-stats');
-    loadingOverlay = document.getElementById('loading-overlay');
-    userNameElement = document.getElementById('user-name');
-    userMembershipElement = document.getElementById('user-membership');
-    
-    // 详细检查DOM元素是否存在
-    console.log('检查DOM元素存在性:');
-    console.log('- loginBtn:', !!loginBtn);
-    console.log('- logoutBtn:', !!logoutBtn);
-    console.log('- loginSection:', !!loginSection);
-    console.log('- userInfoSection:', !!userInfoSection);
-    
-    // 检查DOM元素是否存在
-    if (!loginBtn) {
-        console.error('错误：找不到登录按钮元素');
-        // 创建临时错误显示元素
-        const errorElement = document.createElement('div');
-        errorElement.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: red; color: white; padding: 10px; text-align: center; z-index: 1000;';
-        errorElement.textContent = '错误：找不到登录按钮，请检查页面结构';
-        document.body.appendChild(errorElement);
-        return;
+// 使用授权码获取访问令牌，增强错误处理
+async function getAccessToken(code) {
+    if (!code) {
+        throw new Error('无效的授权码');
     }
     
-    if (!logoutBtn || !loginSection || !userInfoSection) {
-        console.error('警告：缺少部分UI元素，但继续执行');
-    }
-    
-    // 处理可能的授权回调
-    handleAuthCallback();
-    
-    // 清除可能存在的旧数据，确保干净的登录状态
-    clearToken();
-    localStorage.removeItem('userMembership');
-    localStorage.removeItem('historicalRanks');
-    localStorage.removeItem('postLoginAction');
-    
-    // 独立的登录点击处理函数 - 简化为直接跳转到OAuth授权页面
-    const handleLoginClick = () => {
-        console.log('登录按钮被点击，准备跳转到OAuth授权页面');
-        try {
-            // 直接创建并跳转到OAuth授权URL
-            const authUrl = createAuthUrl();
-            console.log('即将跳转到OAuth授权页面:', authUrl);
-            window.location.href = authUrl;
-        } catch (error) {
-            console.error('创建授权URL时出错:', error);
-            // 使用alert作为备用错误提示
-            alert('登录失败：' + error.message);
-        }
-    };
-    
-    // 绑定登录按钮事件 - 添加错误处理
-    console.log('绑定登录按钮事件...');
-    try {
-        // 先移除可能存在的旧事件监听器
-        const newLoginBtn = loginBtn.cloneNode(true);
-        loginBtn.parentNode.replaceChild(newLoginBtn, loginBtn);
-        loginBtn = newLoginBtn;
-        
-        // 绑定新的事件监听器
-        loginBtn.addEventListener('click', handleLoginClick);
-        console.log('登录按钮事件绑定成功');
-        
-        // 添加视觉反馈
-        loginBtn.style.cursor = 'pointer';
-        loginBtn.addEventListener('mouseover', () => {
-            console.log('鼠标悬停在登录按钮上');
-        });
-    } catch (error) {
-        console.error('绑定登录按钮事件失败:', error);
-        alert('绑定登录事件失败，请刷新页面重试');
-    }
-    
-    // 绑定登出按钮事件（如果存在）
-    if (logoutBtn) {
-        console.log('绑定登出按钮事件...');
-        logoutBtn.addEventListener('click', () => {
-            console.log('登出按钮被点击，清除用户数据');
-            clearToken();
-            localStorage.removeItem('userMembership');
-            localStorage.removeItem('historicalRanks');
-            updateUIBeforeLogin();
-        });
-    }
-    
-    // 初始显示登录界面
-    console.log('初始显示登录界面...');
-    updateUIBeforeLogin();
-}
-
-// 定义Raid信息映射表
-const RAID_INFO = {
-    // Vault of Glass
-    '2163005780': { name: 'Vault of Glass', type: 'raid' },
-    // Deep Stone Crypt
-    '3927670877': { name: 'Deep Stone Crypt', type: 'raid' },
-    // Garden of Salvation
-    '242229215': { name: 'Garden of Salvation', type: 'raid' },
-    // Last Wish
-    '3551918550': { name: 'Last Wish', type: 'raid' },
-    // Crown of Sorrow
-    '1496265438': { name: 'Crown of Sorrow', type: 'raid' },
-    // Scourge of the Past
-    '2989470062': { name: 'Scourge of the Past', type: 'raid' },
-    // Leviathan
-    '3043862721': { name: 'Leviathan', type: 'raid' },
-    // Spire of the Watcher
-    '2693043665': { name: 'Spire of the Watcher', type: 'dungeon' },
-    // Duality
-    '1428264109': { name: 'Duality', type: 'dungeon' },
-    // Grasp of Avarice
-    '2078252230': { name: 'Grasp of Avarice', type: 'dungeon' },
-    // Prophecy
-    '1643839134': { name: 'Prophecy', type: 'dungeon' },
-    // Pit of Heresy
-    '3887404748': { name: 'Pit of Heresy', type: 'dungeon' },
-    // Shattered Throne
-    '1039233188': { name: 'Shattered Throne', type: 'dungeon' }
-};
-
-// Speedrun成就哈希映射
-const SPEEDRUN_ACHIEVEMENTS = {
-    // Vault of Glass Speedrun
-    '3422366478': '2163005780', // VoG
-    // Deep Stone Crypt Speedrun
-    '1914343579': '3927670877', // DSC
-    // Garden of Salvation Speedrun
-    '3338875393': '242229215', // GoS
-    // Last Wish Speedrun
-    '3523375523': '3551918550', // Last Wish
-};
-
-// 获取用户Raid数据
-async function fetchRaidData() {
-    showLoading(true);
+    showLoading('正在获取访问令牌...');
     
     try {
-        const tokenData = getStoredToken();
-        const membershipData = JSON.parse(localStorage.getItem('userMembership'));
+        // 增加重试机制
+        let retries = 2;
+        let lastError = null;
         
-        if (!tokenData || !membershipData) {
-            throw new Error('缺少必要的认证信息');
-        }
-        
-        // 添加调试日志
-        console.log('开始获取Raid数据，membershipId:', membershipData.membershipId);
-        
-        // 获取用户角色信息
-        const characters = await getCharacterIds(membershipData.membershipId, membershipData.membershipType);
-        console.log('获取到的角色数量:', characters.length);
-        
-        // 为每个角色获取活动记录和成就
-        let allActivityData = [];
-        let allAchievements = {};
-        let hasSuccessfulData = false;
-        
-        for (const characterId of characters) {
-            // 获取活动记录
+        while (retries >= 0) {
             try {
-                const activityData = await getActivityHistory(membershipData.membershipId, membershipData.membershipType, characterId);
-                allActivityData = allActivityData.concat(activityData);
-                console.log(`角色 ${characterId} 获取到的活动记录数量:`, activityData.length);
-                hasSuccessfulData = true;
-            } catch (err) {
-                console.error(`获取角色 ${characterId} 的活动记录失败:`, err);
-            }
-            
-            // 获取成就数据
-            try {
-                const achievements = await getCharacterAchievements(membershipData.membershipId, membershipData.membershipType, characterId);
+                const response = await fetch(`${BUNGIE_API_URL}/App/OAuth/Token/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-API-Key': API_KEY
+                    },
+                    body: new URLSearchParams({
+                        'grant_type': 'authorization_code',
+                        'code': code,
+                        'client_id': CLIENT_ID
+                    }),
+                    // 添加超时设置
+                    signal: AbortSignal.timeout(15000) // 15秒超时
+                });
                 
-                // 合并成就数据
-                for (const [achievementHash, timestamp] of Object.entries(achievements)) {
-                    if (!allAchievements[achievementHash] || timestamp > allAchievements[achievementHash]) {
-                        allAchievements[achievementHash] = timestamp;
-                    }
+                if (!response.ok) {
+                    throw new Error(`获取令牌失败: HTTP ${response.status} ${response.statusText}`);
                 }
-                console.log(`角色 ${characterId} 获取到的成就数量:`, Object.keys(achievements).length);
-                hasSuccessfulData = true;
-            } catch (err) {
-                console.error(`获取角色 ${characterId} 的成就数据失败:`, err);
+                
+                const data = await response.json();
+                
+                // 检查API返回的错误码
+                if (!data || data.ErrorCode === 0) {
+                    throw new Error('服务器返回了无效响应');
+                }
+                
+                if (data.ErrorCode !== 1) {
+                    throw new Error(`Bungie API错误: ${data.Message || '未知错误'}`);
+                }
+                
+                // 验证响应结构
+                if (!data.Response || !data.Response.access_token) {
+                    throw new Error('未在响应中找到访问令牌');
+                }
+                
+                // 保存访问令牌
+                const accessToken = data.Response.access_token;
+                try {
+                    localStorage.setItem('bungie_access_token', accessToken);
+                } catch (storageError) {
+                    console.error('保存访问令牌失败:', storageError);
+                    // 继续执行，即使保存失败
+                }
+                
+                return accessToken;
+            } catch (error) {
+                lastError = error;
+                retries--;
+                
+                if (retries >= 0) {
+                    console.warn(`请求失败，${retries + 1}次重试剩余:`, error.message);
+                    // 等待1秒后重试
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
             }
         }
         
-        // 检查是否有成功获取的数据
-        if (!hasSuccessfulData && allActivityData.length === 0 && Object.keys(allAchievements).length === 0) {
-            throw new Error('无法获取到任何角色的活动或成就数据');
-        }
-        
-        // 处理和计算Raid数据
-        const raidStats = processRaidData(allActivityData, allAchievements);
-        
-        // 检查处理后的数据
-        console.log('处理后的Raid统计数据:', raidStats);
-        
-        // 显示数据
-        displayRaidData(raidStats);
-        
-        // 计算并显示排名（基于实际数据）
-        calculateAndDisplayRankings(raidStats);
-        
+        // 所有重试都失败
+        throw lastError || new Error('未知错误');
     } catch (error) {
-        console.error('获取Raid数据失败:', error);
+        const errorMessage = error.name === 'AbortError' 
+            ? '请求超时，请检查网络连接' 
+            : `获取访问令牌失败: ${error.message}`;
         
-        // 使用专门的错误消息函数显示全局错误
-        showErrorMessage(`数据获取失败: ${error.message}`);
-        
-        // 清除数据显示区域
-        const fullClearsData = document.getElementById('full-clears-data');
-        const speedrunData = document.getElementById('speedrun-data');
-        const totalFullClearsElement = document.getElementById('total-full-clears');
-        const totalSpeedrunTimeElement = document.getElementById('total-speedrun-time');
-        
-        if (fullClearsData && speedrunData) {
-            fullClearsData.innerHTML = '';
-            speedrunData.innerHTML = '';
-        }
-        
-        if (totalFullClearsElement && totalSpeedrunTimeElement) {
-            totalFullClearsElement.textContent = '0';
-            totalSpeedrunTimeElement.textContent = '-';
-        }
-        
-        // 显示排名错误
-        const rankFullClearsElement = document.getElementById('rank-full-clears');
-        const rankSpeedrunElement = document.getElementById('rank-speedrun');
-        
-        if (rankFullClearsElement && rankSpeedrunElement) {
-            rankFullClearsElement.textContent = '-';
-            rankSpeedrunElement.textContent = '-';
-        }
-        
+        showError(errorMessage);
+        throw new Error(errorMessage);
     } finally {
-        showLoading(false);
+        hideLoading();
     }
 }
 
-// 获取用户角色ID列表
-async function getCharacterIds(membershipId, membershipType) {
-    console.log(`开始获取角色信息，membershipId: ${membershipId}, membershipType: ${membershipType}`);
-    const tokenData = getStoredToken();
-    
-    const response = await fetch(
-        `https://www.bungie.net/Platform/Destiny2/${membershipType}/Profile/${membershipId}/?components=100`,
-        {
-            headers: {
-                'X-API-Key': BUNGIE_API_KEY,
-                'Authorization': `Bearer ${tokenData.access_token}`
-            }
+// 处理授权码
+async function handleAuthCode(code) {
+    try {
+        const accessToken = await getAccessToken(code);
+        
+        // 如果当前是在弹出窗口中，通知父窗口授权成功并关闭
+        if (window.opener) {
+            window.opener.postMessage({ type: 'AUTH_SUCCESS', accessToken }, window.location.origin);
+            window.close();
+        } else {
+            // 直接在当前页面处理
+            await loadUserData(accessToken);
         }
-    );
-    
-    console.log('角色信息请求响应状态:', response.status);
-    
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('获取角色信息失败:', errorData);
-        throw new Error(`获取角色信息失败: ${response.status} - ${errorData.Message || '权限不足或账号数据异常'}`);
+    } catch (error) {
+        console.error('处理授权码失败:', error);
     }
-    
-    const data = await response.json();
-    console.log('获取到的角色数据:', data.Response?.characters);
-    
-    if (!data.Response || !data.Response.characters || !data.Response.characters.data) {
-        console.error('未找到角色数据');
-        throw new Error('未找到角色数据');
-    }
-    
-    const characters = data.Response.characters.data;
-    const characterIds = Object.keys(characters);
-    console.log(`成功获取到 ${characterIds.length} 个角色ID`);
-    
-    return characterIds;
 }
 
-// 获取角色活动历史
-async function getActivityHistory(membershipId, membershipType, characterId) {
-    const tokenData = getStoredToken();
-    const activities = [];
-    let page = 0;
-    const pageSize = 250;
-    let hasMore = true;
+// 显示加载指示器
+function showLoading(text = '加载中...') {
+    loadingText.textContent = text;
+    loadingIndicator.classList.remove('hidden');
+}
+
+// 隐藏加载指示器
+function hideLoading() {
+    loadingIndicator.classList.add('hidden');
+}
+
+// 显示错误消息，增强错误展示
+function showError(message) {
+    // 检查错误元素是否存在
+    if (loginError) {
+        loginError.textContent = message;
+        loginError.classList.add('show');
+        
+        // 清除之前的定时器
+        if (showError.timeout) {
+            clearTimeout(showError.timeout);
+        }
+        
+        // 设置新的定时器
+        showError.timeout = setTimeout(() => {
+            loginError.classList.remove('show');
+        }, 5000);
+    }
     
-    // 限制获取的活动数量，避免请求过多
-    const maxActivities = 1000;
+    // 同时显示通知消息
+    showNotification(message, 'error');
     
-    while (hasMore && activities.length < maxActivities) {
-        const response = await fetch(
-            `https://www.bungie.net/Platform/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/?mode=4&count=${pageSize}&page=${page}`,
-            {
-                headers: {
-                    'X-API-Key': BUNGIE_API_KEY,
-                    'Authorization': `Bearer ${tokenData.access_token}`
-                }
+    // 记录到控制台
+    console.error('错误:', message);
+}
+
+// 处理来自弹出窗口的消息
+function setupMessageListener() {
+    window.addEventListener('message', async (event) => {
+        // 验证消息来源
+        if (event.origin !== window.location.origin) return;
+        
+        if (event.data && event.data.type === 'AUTH_SUCCESS') {
+            const accessToken = event.data.accessToken;
+            // 显示授权成功提示
+            showNotification('授权成功！正在加载您的信息...');
+            await loadUserData(accessToken);
+        } else if (event.data && event.data.type === 'BUNGIE_AUTH_SUCCESS') {
+            const accessToken = event.data.accessToken;
+            // 显示授权成功提示
+            showNotification('授权成功！正在加载您的信息...');
+            await loadUserData(accessToken);
+        }
+    });
+}
+
+// 检查用户是否已登录
+function checkAuthStatus() {
+    const accessToken = localStorage.getItem('bungie_access_token');
+    if (accessToken) {
+        loadUserData(accessToken);
+    }
+}
+
+// 登出功能
+function setupLogout() {
+    logoutButton.addEventListener('click', () => {
+        localStorage.removeItem('bungie_access_token');
+        loginSection.classList.remove('hidden');
+        userInfoSection.classList.add('hidden');
+        clanSection.classList.add('hidden');
+        onlineStatusSection.classList.add('hidden');
+        raidDataSection.classList.add('hidden');
+    });
+}
+
+// 初始化
+function init() {
+    // 检查是否是授权回调
+    const isAuthCallback = checkForAuthCallback();
+    
+    if (!isAuthCallback) {
+        // 设置消息监听器以接收来自弹出窗口的授权成功通知
+        setupMessageListener();
+        
+        // 设置登录按钮点击事件
+        loginButton.addEventListener('click', openAuthWindow);
+        
+        // 设置登出功能
+        setupLogout();
+        
+        // 检查用户是否已登录
+        checkAuthStatus();
+    }
+}
+
+// 通用API请求函数，带加载状态和错误处理
+async function fetchBungieApi(endpoint, accessToken, loadingMessage = '') {
+    try {
+        // 如果提供了加载消息，则显示加载状态
+        if (loadingMessage) {
+            showLoading(loadingMessage);
+        }
+        
+        const response = await fetch(`${BUNGIE_API_URL}${endpoint}`, {
+            method: 'GET',
+            headers: {
+                'X-API-Key': API_KEY,
+                'Authorization': `Bearer ${accessToken}`
             }
-        );
+        });
         
         if (!response.ok) {
-            throw new Error('获取活动历史失败');
+            throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
         }
         
         const data = await response.json();
-        const pageActivities = data.Response.activities || [];
         
-        if (pageActivities.length === 0) {
-            hasMore = false;
-        } else {
-            activities.push(...pageActivities);
-            page++;
-            
-            // 如果返回的活动数量小于请求的数量，说明没有更多了
-            if (pageActivities.length < pageSize) {
-                hasMore = false;
-            }
+        if (data.ErrorCode !== 1) {
+            throw new Error(`Bungie API错误: ${data.Message || '未知错误'}`);
         }
-    }
-    
-    return activities;
-}
-
-// 获取角色成就
-async function getCharacterAchievements(membershipId, membershipType, characterId) {
-    const tokenData = getStoredToken();
-    
-    // 获取成就进度
-    const response = await fetch(
-        `https://www.bungie.net/Platform/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Achievements/`,
-        {
-            headers: {
-                'X-API-Key': BUNGIE_API_KEY,
-                'Authorization': `Bearer ${tokenData.access_token}`
-            }
-        }
-    );
-    
-    if (!response.ok) {
-        throw new Error('获取成就数据失败');
-    }
-    
-    const data = await response.json();
-    const achievements = {};
-    
-    // 处理成就数据
-    if (data.Response && data.Response.achievements) {
-        data.Response.achievements.forEach(achievement => {
-            if (achievement.achieved && achievement.CompletionDate) {
-                achievements[achievement.hash] = new Date(achievement.CompletionDate).getTime();
-            }
-        });
-    }
-    
-    return achievements;
-}
-
-// 处理Raid数据
-function processRaidData(activities, achievements) {
-    const raidStats = {
-        fullClears: {},
-        speedruns: {},
-        totalFullClears: 0,
-        totalSpeedrunTime: 0
-    };
-    
-    // 统计完整通关次数
-    activities.forEach(activity => {
-        const activityHash = activity.activityDetails.referenceId.toString();
         
-        // 检查是否是我们关注的Raid或地下城
-        if (RAID_INFO[activityHash] && RAID_INFO[activityHash].type === 'raid') {
-            const raidName = RAID_INFO[activityHash].name;
-            
-            // 检查是否成功完成
-            if (activity.values.completed && activity.values.completed.basic.value > 0) {
-                if (!raidStats.fullClears[raidName]) {
-                    raidStats.fullClears[raidName] = 0;
-                }
-                raidStats.fullClears[raidName]++;
-                raidStats.totalFullClears++;
-            }
-            
-            // 检查是否是快速通关（这里简化处理，实际应该根据完成时间判断）
-            // 或者通过成就来判断
-            const completionTime = activity.values.durationSeconds ? activity.values.durationSeconds.basic.value : 0;
-            if (completionTime > 0) {
-                // 检查是否有对应的speedrun成就
-                const speedrunAchievementHash = Object.keys(SPEEDRUN_ACHIEVEMENTS).find(hash => 
-                    SPEEDRUN_ACHIEVEMENTS[hash] === activityHash
-                );
-                
-                if (speedrunAchievementHash && achievements[speedrunAchievementHash]) {
-                    if (!raidStats.speedruns[raidName]) {
-                        raidStats.speedruns[raidName] = {
-                            count: 0,
-                            totalTime: 0,
-                            times: []
-                        };
-                    }
-                    
-                    raidStats.speedruns[raidName].count++;
-                    raidStats.speedruns[raidName].totalTime += completionTime;
-                    raidStats.speedruns[raidName].times.push(completionTime);
-                    raidStats.totalSpeedrunTime += completionTime;
-                }
-            }
+        return data.Response;
+    } catch (error) {
+        console.error(`API请求错误 (${endpoint}):`, error);
+        showError(`请求失败: ${error.message}`);
+        throw error;
+    } finally {
+        // 无论请求成功还是失败，都隐藏加载状态
+        if (loadingMessage) {
+            hideLoading();
         }
-    });
-    
-    // 对于没有活动数据但有成就的情况进行补充
-    Object.entries(SPEEDRUN_ACHIEVEMENTS).forEach(([achievementHash, activityHash]) => {
-        if (achievements[achievementHash] && RAID_INFO[activityHash]) {
-            const raidName = RAID_INFO[activityHash].name;
-            
-            if (!raidStats.speedruns[raidName]) {
-                raidStats.speedruns[raidName] = {
-                    count: 0,
-                    totalTime: 0,
-                    times: []
-                };
-            }
-            
-            // 如果没有记录时间，使用默认值
-            if (raidStats.speedruns[raidName].count === 0) {
-                raidStats.speedruns[raidName].count = 1;
-                // 假设平均通关时间为45分钟
-                const defaultTime = 45 * 60;
-                raidStats.speedruns[raidName].totalTime = defaultTime;
-                raidStats.speedruns[raidName].times.push(defaultTime);
-                raidStats.totalSpeedrunTime += defaultTime;
-            }
-        }
-    });
-    
-    return raidStats;
-}
-
-// 格式化秒数为时间字符串
-function formatTime(seconds) {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    
-    if (hours > 0) {
-        return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    } else {
-        return `${minutes}:${secs.toString().padStart(2, '0')}`;
     }
 }
 
-// 不再需要模拟数据函数，API调用失败时直接显示错误信息
+// 获取当前用户的会员信息，支持加载消息参数
+async function getUserMembership(accessToken, loadingMessage = '') {
+    return fetchBungieApi('/User/GetMembershipsForCurrentUser/', accessToken, loadingMessage);
+}
 
-// 显示Raid数据
-function displayRaidData(raidStats) {
-    // 添加调试日志
-    console.log('显示Raid数据:', raidStats);
-    
-    // 检查DOM元素是否存在
-    const fullClearsData = document.getElementById('full-clears-data');
-    const speedrunData = document.getElementById('speedrun-data');
-    const totalFullClearsElement = document.getElementById('total-full-clears');
-    const totalSpeedrunTimeElement = document.getElementById('total-speedrun-time');
-    
-    // 如果缺少必要的DOM元素，输出错误信息
-    if (!fullClearsData || !speedrunData || !totalFullClearsElement || !totalSpeedrunTimeElement) {
-        console.error('缺少必要的DOM元素');
+// 获取用户详细信息，支持加载消息参数
+async function getUserInfo(membershipType, membershipId, accessToken, loadingMessage = '') {
+    return fetchBungieApi(`/User/GetPublicUserInfo/${membershipId}/`, accessToken, loadingMessage);
+}
+
+// 获取用户在线状态，带加载状态
+async function getUserPresence(membershipType, membershipId, accessToken) {
+    try {
+        const response = await fetchBungieApi(
+            `/User/Presence/${membershipType}/${membershipId}/`,
+            accessToken,
+            '正在获取用户在线状态...'
+        );
+        return response;
+    } catch (error) {
+        console.error('获取用户在线状态失败:', error);
+        // 只记录错误，不显示加载状态，因为在并行加载中
+        return null;
+    }
+}
+
+// 显示用户在线状态
+function displayUserPresence(presenceData) {
+    if (!presenceData) {
+        userStatus.textContent = '状态: 未知';
+        onlineStatusSection.classList.remove('hidden');
         return;
     }
     
-    // 构建Full Clears HTML
-    let fullClearsHtml = '';
-    if (Object.keys(raidStats.fullClears).length > 0) {
-        // 按通关次数降序排序
-        const sortedRaids = Object.entries(raidStats.fullClears)
-            .sort((a, b) => b[1] - a[1]);
-            
-        sortedRaids.forEach(([raidName, count]) => {
-            fullClearsHtml += `
-                <div class="raid-item">
-                    <span class="raid-name">${raidName}</span>
-                    <span class="raid-value">${count}</span>
-                </div>
-            `;
-        });
-    } else {
-        fullClearsHtml = '<p class="loading-message">未找到Raid通关记录</p>';
+    try {
+        const isOnline = presenceData.isOnline;
+        const statusText = isOnline ? '在线' : '离线';
+        
+        userStatus.textContent = `状态: ${statusText}`;
+        
+        // 更新在线好友列表
+        if (presenceData.friends && presenceData.friends.length > 0) {
+            const onlineFriendsList = presenceData.friends.filter(friend => friend.isOnline);
+            onlineFriends.textContent = `在线好友: ${onlineFriendsList.length}`;
+        } else {
+            onlineFriends.textContent = '在线好友: 0';
+        }
+        
+        onlineStatusSection.classList.remove('hidden');
+    } catch (error) {
+        console.error('显示用户状态失败:', error);
+        userStatus.textContent = '状态: 未知';
+        onlineStatusSection.classList.remove('hidden');
+    }
+}
+
+// 获取用户公会信息，带加载状态
+async function getUserGroups(membershipType, membershipId, accessToken) {
+    try {
+        const response = await fetchBungieApi(
+            `/GroupV2/User/${membershipType}/${membershipId}/0/1/`,
+            accessToken,
+            '正在获取公会信息...'
+        );
+        return response;
+    } catch (error) {
+        console.error('获取用户公会信息失败:', error);
+        // 只记录错误，不显示加载状态，因为在并行加载中
+        return null;
+    }
+}
+
+// 显示公会信息
+function displayGroupInfo(groupData) {
+    if (!groupData || !groupData.groups || groupData.groups.length === 0) {
+        clanName.textContent = '未加入公会';
+        clanMembers.textContent = '';
+        clanDescription.textContent = '';
+        clanSection.classList.remove('hidden');
+        return;
     }
     
-    // 构建Speedrun HTML
-    let speedrunHtml = '';
-    if (Object.keys(raidStats.speedruns).length > 0) {
-        // 按通关次数降序排序
-        const sortedSpeedruns = Object.entries(raidStats.speedruns)
-            .sort((a, b) => b[1].count - a[1].count);
-            
-        sortedSpeedruns.forEach(([raidName, data]) => {
-            // 计算平均时间
-            const avgTime = data.times && data.times.length > 0 
-                ? Math.floor(data.times.reduce((sum, time) => sum + time, 0) / data.times.length)
-                : data.totalTime;
+    try {
+        const primaryGroup = groupData.groups[0];
+        clanName.textContent = `公会: ${primaryGroup.name}`;
+        clanMembers.textContent = `成员数量: ${primaryGroup.memberCount}`;
+        clanDescription.textContent = primaryGroup.about || '无公会描述';
+        clanSection.classList.remove('hidden');
+    } catch (error) {
+        console.error('显示公会信息失败:', error);
+        clanName.textContent = '公会信息加载失败';
+        clanMembers.textContent = '';
+        clanDescription.textContent = '';
+        clanSection.classList.remove('hidden');
+    }
+}
+
+// 获取用户Raid数据，带加载状态
+async function getUserRaidData(membershipType, membershipId, accessToken) {
+    try {
+        // 获取角色信息
+        const profileResponse = await fetchBungieApi(
+            `/Destiny2/${membershipType}/Profile/${membershipId}/?components=100`,
+            accessToken,
+            '正在获取角色信息...'
+        );
+        
+        // 检查是否有角色数据
+        if (!profileResponse.characters || !profileResponse.characters.data) {
+            return { activities: [] };
+        }
+        
+        const characterIds = Object.keys(profileResponse.characters.data);
+        const raidActivities = [];
+        
+        // 如果没有角色，直接返回
+        if (characterIds.length === 0) {
+            return { activities: [] };
+        }
+        
+        // 遍历角色获取Raid活动数据
+        for (const characterId of characterIds) {
+            try {
+                // 更新加载状态，显示当前处理的角色
+                showLoading(`正在获取角色${characterIds.indexOf(characterId) + 1}/${characterIds.length}的Raid数据...`);
                 
-            speedrunHtml += `
-                <div class="raid-item">
-                    <span class="raid-name">${raidName}</span>
-                    <span class="raid-value">${formatTime(avgTime)} (${data.count}次)</span>
-                </div>
-            `;
-        });
-    } else {
-        speedrunHtml = '<p class="loading-message">未找到Speedrun记录</p>';
-    }
-    
-    // 更新DOM
-    fullClearsData.innerHTML = fullClearsHtml;
-    speedrunData.innerHTML = speedrunHtml;
-    
-    // 更新总计
-    totalFullClearsElement.textContent = raidStats.totalFullClears.toString();
-    totalSpeedrunTimeElement.textContent = formatTime(raidStats.totalSpeedrunTime);
-}
-
-// 计算并显示排名（改进的模拟版本）
-function calculateAndDisplayRankings(raidStats) {
-    // 从本地存储获取历史排名数据
-    let historicalRanks = JSON.parse(localStorage.getItem('historicalRanks') || '{}');
-    
-    // 根据Raid通关次数计算相对合理的排名
-    const fullClearsCount = raidStats.totalFullClears;
-    const speedrunCount = Object.values(raidStats.speedruns).reduce((sum, run) => sum + run.count, 0);
-    
-    // 基于经验值的排名计算（更合理的模拟）
-    // 假设玩家基数为100,000人
-    const playerBase = 100000;
-    
-    // 根据通关次数计算大致排名百分比
-    let fullClearsPercentile = 0.8; // 默认80%（大部分玩家Raid次数较少）
-    if (fullClearsCount >= 100) {
-        fullClearsPercentile = 0.1; // 100次以上进入前10%
-    } else if (fullClearsCount >= 50) {
-        fullClearsPercentile = 0.2; // 50次以上进入前20%
-    } else if (fullClearsCount >= 20) {
-        fullClearsPercentile = 0.4; // 20次以上进入前40%
-    } else if (fullClearsCount >= 10) {
-        fullClearsPercentile = 0.6; // 10次以上进入前60%
-    }
-    
-    // Speedrun排名计算（通常比普通通关更稀有）
-    let speedrunPercentile = 0.9; // 默认90%
-    if (speedrunCount >= 10) {
-        speedrunPercentile = 0.05; // 10次以上进入前5%
-    } else if (speedrunCount >= 5) {
-        speedrunPercentile = 0.1; // 5次以上进入前10%
-    } else if (speedrunCount >= 2) {
-        speedrunPercentile = 0.3; // 2次以上进入前30%
-    } else if (speedrunCount >= 1) {
-        speedrunPercentile = 0.6; // 1次以上进入前60%
-    }
-    
-    // 计算大致排名
-    let fullClearsRank = Math.floor(playerBase * fullClearsPercentile);
-    let speedrunRank = Math.floor(playerBase * speedrunPercentile);
-    
-    // 如果有历史排名，使用移动平均来保持排名的连贯性
-    if (historicalRanks.lastFullClearsRank && historicalRanks.lastSpeedrunRank) {
-        // 70%权重给新排名，30%权重给历史排名，以避免排名波动过大
-        fullClearsRank = Math.floor(fullClearsRank * 0.7 + historicalRanks.lastFullClearsRank * 0.3);
-        speedrunRank = Math.floor(speedrunRank * 0.7 + historicalRanks.lastSpeedrunRank * 0.3);
-    }
-    
-    // 添加一些随机波动（±5%）使排名看起来更自然
-    const fullClearsVariance = Math.floor(fullClearsRank * 0.05);
-    const speedrunVariance = Math.floor(speedrunRank * 0.05);
-    
-    fullClearsRank = Math.max(1, fullClearsRank + (Math.random() * fullClearsVariance * 2 - fullClearsVariance));
-    speedrunRank = Math.max(1, speedrunRank + (Math.random() * speedrunVariance * 2 - speedrunVariance));
-    
-    // 保存当前排名作为历史记录
-    historicalRanks = {
-        lastFullClearsRank: fullClearsRank,
-        lastSpeedrunRank: speedrunRank,
-        lastUpdated: Date.now()
-    };
-    localStorage.setItem('historicalRanks', JSON.stringify(historicalRanks));
-    
-    // 更新UI显示
-    document.getElementById('rank-full-clears').textContent = Math.floor(fullClearsRank).toLocaleString();
-    document.getElementById('rank-speedrun').textContent = Math.floor(speedrunRank).toLocaleString();
-    
-    // 添加排名趋势指示
-    updateRankTrendIndicators(fullClearsRank, speedrunRank, historicalRanks);
-}
-
-// 更新排名趋势指示器
-function updateRankTrendIndicators(fullClearsRank, speedrunRank, historicalRanks) {
-    // 检查DOM中是否已有趋势指示器，如果没有则创建
-    let fullClearsTrend = document.getElementById('full-clears-trend');
-    let speedrunTrend = document.getElementById('speedrun-trend');
-    
-    // 获取排名元素
-    const fullClearsRankElement = document.getElementById('rank-full-clears');
-    const speedrunRankElement = document.getElementById('rank-speedrun');
-    
-    // 添加趋势指示器（只在首次添加）
-    if (!fullClearsTrend) {
-        // 为Full Clears排名添加趋势指示器
-        fullClearsTrend = document.createElement('span');
-        fullClearsTrend.id = 'full-clears-trend';
-        fullClearsTrend.className = 'rank-trend';
-        fullClearsRankElement.parentNode.appendChild(fullClearsTrend);
+                const activitiesResponse = await fetchBungieApi(
+                    `/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/?mode=4&count=25`,
+                    accessToken
+                );
+                
+                if (activitiesResponse.activities) {
+                    // 筛选Raid活动
+                    const completedRaids = activitiesResponse.activities
+                        .filter(activity => 
+                            activity.values && 
+                            activity.values.completed && 
+                            activity.values.completed.basic && 
+                            activity.values.completed.basic.value === 1
+                        );
+                    
+                    raidActivities.push(...completedRaids);
+                }
+            } catch (error) {
+                console.error(`获取角色${characterId}的Raid数据失败:`, error);
+                // 继续处理其他角色
+            }
+        }
         
-        // 为Speedrun排名添加趋势指示器
-        speedrunTrend = document.createElement('span');
-        speedrunTrend.id = 'speedrun-trend';
-        speedrunTrend.className = 'rank-trend';
-        speedrunRankElement.parentNode.appendChild(speedrunTrend);
-        
-        // 添加趋势指示器的样式
-        const style = document.createElement('style');
-        style.textContent = `
-            .rank-trend {
-                margin-left: 8px;
-                font-size: 0.8em;
-                padding: 2px 6px;
-                border-radius: 10px;
-                font-weight: normal;
-            }
-            .trend-up {
-                background-color: rgba(255, 99, 132, 0.2);
-                color: #ff6384;
-            }
-            .trend-down {
-                background-color: rgba(75, 192, 192, 0.2);
-                color: #4bc0c0;
-            }
-            .trend-stable {
-                background-color: rgba(255, 206, 86, 0.2);
-                color: #ffce56;
-            }
-        `;
-        document.head.appendChild(style);
+        hideLoading(); // 确保隐藏加载状态
+        return { activities: raidActivities };
+    } catch (error) {
+        console.error('获取Raid数据失败:', error);
+        hideLoading(); // 确保隐藏加载状态
+        return { activities: [] };
     }
-    
-    // 计算趋势（这里简化处理，实际应该与历史数据比较）
-    // 由于我们使用了移动平均，这里只是添加视觉效果
-    const fullClearsTrendClass = Math.random() > 0.5 ? 'trend-up' : 'trend-down';
-    const speedrunTrendClass = Math.random() > 0.5 ? 'trend-up' : 'trend-down';
-    
-    // 更新趋势指示器
-    fullClearsTrend.className = `rank-trend ${fullClearsTrendClass}`;
-    speedrunTrend.className = `rank-trend ${speedrunTrendClass}`;
-    
-    fullClearsTrend.textContent = fullClearsTrendClass === 'trend-up' ? '↑' : '↓';
-    speedrunTrend.textContent = speedrunTrendClass === 'trend-up' ? '↑' : '↓';
 }
 
-// 确保在DOM完全加载后初始化
-if (document.readyState === 'loading') {
-    console.log('DOM尚未加载完成，等待DOMContentLoaded事件...');
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    console.log('DOM已经加载完成，立即初始化...');
-    init();
+// 显示Raid数据
+function displayRaidData(raidData) {
+    if (!raidData || !raidData.activities || raidData.activities.length === 0) {
+        raidCompletions.textContent = '暂无Raid完成记录';
+        raidDataSection.classList.remove('hidden');
+        return;
+    }
+    
+    try {
+        // 计算完成次数
+        const completionCount = raidData.activities.length;
+        raidCompletions.textContent = `Raid完成次数: ${completionCount}`;
+        
+        // 可以在这里添加更详细的Raid数据显示逻辑
+        raidDataSection.classList.remove('hidden');
+    } catch (error) {
+        console.error('显示Raid数据失败:', error);
+        raidCompletions.textContent = 'Raid数据加载失败';
+        raidDataSection.classList.remove('hidden');
+    }
 }
+
+// 加载额外数据，统一管理加载状态
+async function loadAdditionalData(membershipType, membershipId, accessToken) {
+    try {
+        showLoading('正在加载额外数据...');
+        
+        // 为每个请求创建Promise，添加独立的错误处理
+        const presencePromise = getUserPresence(membershipType, membershipId, accessToken)
+            .catch(error => {
+                console.error('加载在线状态失败:', error);
+                return null;
+            });
+        
+        const groupPromise = getUserGroups(membershipType, membershipId, accessToken)
+            .catch(error => {
+                console.error('加载公会信息失败:', error);
+                return null;
+            });
+        
+        const raidPromise = getUserRaidData(membershipType, membershipId, accessToken)
+            .catch(error => {
+                console.error('加载Raid数据失败:', error);
+                return { activities: [] };
+            });
+        
+        // 并行加载所有额外数据
+        const [presenceData, groupData, raidData] = await Promise.allSettled([
+            presencePromise,
+            groupPromise,
+            raidPromise
+        ]);
+        
+        // 提取结果
+        const presenceResult = presenceData.status === 'fulfilled' ? presenceData.value : null;
+        const groupResult = groupData.status === 'fulfilled' ? groupData.value : null;
+        const raidResult = raidData.status === 'fulfilled' ? raidData.value : { activities: [] };
+        
+        // 显示所有数据
+        displayUserPresence(presenceResult);
+        displayGroupInfo(groupResult);
+        displayRaidData(raidResult);
+        
+        // 检查是否有失败的请求
+        const failedRequests = [presenceData, groupData, raidData].filter(p => p.status === 'rejected');
+        if (failedRequests.length > 0) {
+            showNotification(`部分数据可能未完全加载，但不影响主要功能`);
+        }
+        
+    } catch (error) {
+        console.error('加载额外数据时出错:', error);
+        showError(`部分数据加载失败: ${error.message}`);
+    } finally {
+        hideLoading();
+    }
+}
+
+// 加载用户数据，增强错误处理和状态管理
+async function loadUserData(accessToken) {
+    // 验证访问令牌
+    if (!accessToken) {
+        showError('无效的访问令牌');
+        return;
+    }
+    
+    showLoading('正在加载用户信息...');
+    
+    try {
+        // 获取当前用户的会员信息
+        const membershipData = await getUserMembership(accessToken, '正在验证用户身份...');
+        
+        // 验证返回的数据结构
+        if (!membershipData) {
+            throw new Error('未收到有效数据');
+        }
+        
+        // 找到主要的会员信息（优先选择Steam或其他主要平台）
+        let primaryMembership = null;
+        
+        // 先检查是否有跨平台会员信息
+        if (membershipData.bungieNetUser && membershipData.bungieNetUser.membershipId) {
+            primaryMembership = {
+                membershipType: 254, // Bungie.net平台类型
+                membershipId: membershipData.bungieNetUser.membershipId,
+                displayName: membershipData.bungieNetUser.displayName
+            };
+        }
+        
+        // 如果没有，则从linkedProfiles中找一个
+        if (!primaryMembership && membershipData.linkedProfiles && membershipData.linkedProfiles.length > 0) {
+            // 优先选择Steam平台(3)，如果没有则选择第一个
+            const steamProfile = membershipData.linkedProfiles.find(p => p.membershipType === 3);
+            primaryMembership = steamProfile || membershipData.linkedProfiles[0];
+        }
+        
+        if (!primaryMembership) {
+            throw new Error('未找到有效的会员信息');
+        }
+        
+        // 获取用户详细信息
+        let userInfo = null;
+        try {
+            showLoading('正在获取用户详细信息...');
+            userInfo = await getUserInfo(primaryMembership.membershipType, primaryMembership.membershipId, accessToken);
+        } catch (error) {
+            console.warn('获取用户详细信息失败，将使用基本会员信息', error);
+            // 继续执行，不中断流程
+        }
+        
+        // 显示用户信息
+        userName.textContent = primaryMembership.displayName || '未知用户';
+        userMembershipId.textContent = `会员ID: ${primaryMembership.membershipId}`;
+        
+        // 设置默认头像或使用API返回的头像
+        try {
+            if (userInfo && userInfo.profilePicturePath) {
+                userAvatar.src = `https://www.bungie.net${userInfo.profilePicturePath}`;
+            } else {
+                userAvatar.src = 'https://www.bungie.net/img/platform/Triumphs/defaultAvatar.png';
+            }
+            userAvatar.alt = `${primaryMembership.displayName || '用户'}的头像`;
+        } catch (error) {
+            console.error('设置头像失败:', error);
+            userAvatar.src = 'https://www.bungie.net/img/platform/Triumphs/defaultAvatar.png';
+        }
+        
+        // 保存会员信息到localStorage以便后续使用
+        try {
+            localStorage.setItem('user_membership_type', primaryMembership.membershipType);
+            localStorage.setItem('user_membership_id', primaryMembership.membershipId);
+        } catch (error) {
+            console.error('保存会员信息失败:', error);
+            // 继续执行，不中断流程
+        }
+        
+        // 显示用户信息区域，隐藏登录区域
+        loginSection.classList.add('hidden');
+        userInfoSection.classList.remove('hidden');
+        
+        showNotification('登录成功！正在加载您的数据...');
+        
+        // 加载额外数据
+        loadAdditionalData(primaryMembership.membershipType, primaryMembership.membershipId, accessToken);
+        
+    } catch (error) {
+        console.error('加载用户数据失败:', error);
+        showError(`加载用户信息失败: ${error.message}`);
+        
+        // 清除可能错误的令牌
+        localStorage.removeItem('bungie_access_token');
+        
+        // 显示登录区域，隐藏用户信息区域
+        loginSection.classList.remove('hidden');
+        userInfoSection.classList.add('hidden');
+    } finally {
+        hideLoading();
+    }
+}
+
+// 页面加载完成后初始化
+window.addEventListener('DOMContentLoaded', init);

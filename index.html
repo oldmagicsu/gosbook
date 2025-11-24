@@ -3,76 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Destiny 2 Raid 数据统计</title>
+    <title>Bungie OAuth 登录</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <header class="header">
-            <h1>Destiny 2 Raid 数据统计</h1>
-            <p class="subtitle">查看您的Raid成就和全球排名</p>
+        <header>
+            <h1>Bungie 账号登录</h1>
         </header>
         
-        <main class="main-content">
+        <main>
             <!-- 登录区域 -->
             <section id="login-section" class="login-section">
-                <button id="login-btn" class="login-button">
-                    使用 Bungie.net 账号登录
+                <p>点击下方按钮使用Bungie账号登录</p>
+                <button id="login-button" class="login-button">
+                    使用 Bungie 账号登录
                 </button>
-                <p class="login-hint">登录后查看您的Raid数据</p>
+                <div id="login-error" class="error-message"></div>
             </section>
             
             <!-- 用户信息区域 -->
-            <section id="user-info" class="user-info-section" style="display: none;">
-                <div class="user-profile">
-                    <div id="user-avatar" class="avatar-placeholder"></div>
-                    <div class="user-details">
-                        <h2 id="user-name">加载中...</h2>
-                        <p id="user-membership">加载中...</p>
-                    </div>
-                    <button id="logout-btn" class="logout-button">退出登录</button>
-                </div>
-            </section>
-            
-            <!-- 数据展示区域 -->
-            <section id="raid-stats" class="raid-stats-section" style="display: none;">
-                <!-- Full Clears 统计 -->
-                <div class="stats-card">
-                    <h3>Raid Full Clears</h3>
-                    <div id="full-clears-data" class="raid-data">
-                        <p class="loading-message">正在加载数据...</p>
-                    </div>
-                    <div class="total-stats">
-                        <p>总计：<span id="total-full-clears">0</span></p>
-                        <p>全球排名：<span id="rank-full-clears">--</span></p>
+            <section id="user-info-section" class="user-info-section hidden">
+                <div class="user-header">
+                    <img id="user-avatar" class="user-avatar" src="" alt="用户头像">
+                    <div class="user-basic-info">
+                        <h2 id="user-name">用户名</h2>
+                        <p id="user-membership-id">会员ID: </p>
+                        <p id="user-status">状态: </p>
                     </div>
                 </div>
                 
-                <!-- Speedrun 统计 -->
-                <div class="stats-card">
-                    <h3>Raid Speedrun Clears</h3>
-                    <div id="speedrun-data" class="raid-data">
-                        <p class="loading-message">正在加载数据...</p>
-                    </div>
-                    <div class="total-stats">
-                        <p>总时长：<span id="total-speedrun-time">0:00:00</span></p>
-                        <p>全球排名：<span id="rank-speedrun">--</span></p>
+                <button id="logout-button" class="logout-button">登出</button>
+            </section>
+            
+            <!-- 公会信息区域 -->
+            <section id="clan-section" class="data-section hidden">
+                <h3>公会信息</h3>
+                <div id="clan-info" class="data-content">
+                    <p id="clan-name">公会名称: </p>
+                    <p id="clan-members">成员数量: </p>
+                    <p id="clan-description">公会描述: </p>
+                </div>
+            </section>
+            
+            <!-- 用户状态区域 -->
+            <section id="online-status-section" class="data-section hidden">
+                <h3>在线状态</h3>
+                <div id="online-status" class="data-content">
+                    <p>当前在线: </p>
+                    <ul id="online-friends">
+                        <!-- 在线好友列表 -->
+                    </ul>
+                </div>
+            </section>
+            
+            <!-- Raid数据区域 -->
+            <section id="raid-data-section" class="data-section hidden">
+                <h3>Raid数据</h3>
+                <div id="raid-data" class="data-content">
+                    <div id="raid-completions">
+                        <!-- Raid完成数据 -->
                     </div>
                 </div>
             </section>
+            
+            <!-- 加载状态 -->
+            <div id="loading-indicator" class="loading-indicator hidden">
+                <div class="spinner"></div>
+                <p id="loading-text">加载中...</p>
+            </div>
         </main>
         
-        <footer class="footer">
-            <p>数据由 Bungie API 提供</p>
+        <footer>
+            <p>&copy; 2023 Bungie OAuth 示例</p>
         </footer>
     </div>
     
-    <!-- 加载指示器 -->
-    <div id="loading-overlay" class="loading-overlay" style="display: none;">
-        <div class="loading-spinner"></div>
-        <p>加载中，请稍候...</p>
-    </div>
-    
+    <!-- 授权回调处理脚本 -->
     <script src="script.js"></script>
 </body>
 </html>
