@@ -83,6 +83,7 @@ async function handleAuthCallback() {
             
             // 使用code换取token
             const tokenResponse = await exchangeCodeForToken(params.code);
+            
             if (tokenResponse.access_token) {
                 storeToken(tokenResponse);
                 
@@ -96,10 +97,21 @@ async function handleAuthCallback() {
                 
                 // 显示用户信息和数据区域
                 updateUIAfterLogin();
+            } else {
+                throw new Error('未获取到有效的访问令牌');
             }
         } catch (error) {
             console.error('授权处理失败:', error);
-            alert('登录失败，请重试');
+            
+            // 清除可能存在的部分数据
+            clearToken();
+            localStorage.removeItem('userMembership');
+            
+            // 显示更具体的错误信息，使用专门的错误消息函数
+            showErrorMessage(`登录失败: ${error.message}`);
+            
+            // 恢复登录前的UI状态
+            updateUIBeforeLogin();
         } finally {
             showLoading(false);
         }
@@ -108,6 +120,7 @@ async function handleAuthCallback() {
 
 // 使用授权码换取访问令牌
 async function exchangeCodeForToken(code) {
+    console.log('开始使用授权码换取访问令牌');
     const response = await fetch('https://www.bungie.net/Platform/App/OAuth/Token/', {
         method: 'POST',
         headers: {
@@ -121,19 +134,31 @@ async function exchangeCodeForToken(code) {
         })
     });
     
+    console.log('Token请求响应状态:', response.status);
+    
     if (!response.ok) {
-        throw new Error('Token请求失败');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Token请求失败:', errorData);
+        throw new Error(`登录失败: ${response.status} - ${errorData.Message || '请检查您的Bungie账号权限和API配置'}`);
     }
     
-    return await response.json();
+    const tokenData = await response.json();
+    console.log('成功获取到访问令牌');
+    return tokenData;
 }
 
 // 获取用户信息
 async function fetchUserInfo() {
     try {
+        console.log('开始获取用户信息');
         const tokenData = getStoredToken();
-        if (!tokenData) throw new Error('未找到有效token');
         
+        if (!tokenData) {
+            console.error('未找到有效token');
+            throw new Error('未找到有效token');
+        }
+        
+        console.log('使用token获取用户membership信息');
         // 首先获取当前用户的membership信息
         const membershipResponse = await fetch('https://www.bungie.net/Platform/User/GetMembershipsForCurrentUser/', {
             headers: {
@@ -142,28 +167,41 @@ async function fetchUserInfo() {
             }
         });
         
+        console.log('membership请求响应状态:', membershipResponse.status);
+        
         if (!membershipResponse.ok) {
-            throw new Error('获取用户信息失败');
+            const errorData = await membershipResponse.json().catch(() => ({}));
+            console.error('获取用户信息失败:', errorData);
+            throw new Error(`获取用户信息失败: ${membershipResponse.status} - ${errorData.Message || '请检查您的Bungie账号权限'}`);
         }
         
         const data = await membershipResponse.json();
-        if (data.Response && data.Response.destinyMemberships && data.Response.destinyMemberships.length > 0) {
-            // 优先使用Destiny 2的账号
-            const destiny2Membership = data.Response.destinyMemberships.find(m => m.membershipType === 3 || m.membershipType === 1 || m.membershipType === 4);
-            
-            if (destiny2Membership) {
-                userNameElement.textContent = destiny2Membership.displayName;
-                userMembershipElement.textContent = `会员类型: ${getMembershipTypeName(destiny2Membership.membershipType)}`;
-                
-                // 存储membership信息供后续API调用使用
-                localStorage.setItem('userMembership', JSON.stringify({
-                    membershipId: destiny2Membership.membershipId,
-                    membershipType: destiny2Membership.membershipType
-                }));
-                return destiny2Membership;
-            }
+        console.log('获取到的membership数据:', data);
+        
+        if (!data.Response || !data.Response.destinyMemberships || data.Response.destinyMemberships.length === 0) {
+            console.error('未找到destinyMemberships数据');
+            throw new Error('未找到有效的Destiny账号');
         }
-        throw new Error('未找到有效的Destiny账号');
+        
+        // 优先使用Destiny 2的账号
+        const destiny2Membership = data.Response.destinyMemberships.find(m => m.membershipType === 3 || m.membershipType === 1 || m.membershipType === 4);
+        
+        if (!destiny2Membership) {
+            console.error('未找到Destiny 2账号');
+            throw new Error('未找到有效的Destiny 2账号');
+        }
+        
+        console.log('找到Destiny 2账号:', destiny2Membership.displayName);
+        userNameElement.textContent = destiny2Membership.displayName;
+        userMembershipElement.textContent = `会员类型: ${getMembershipTypeName(destiny2Membership.membershipType)}`;
+        
+        // 存储membership信息供后续API调用使用
+        localStorage.setItem('userMembership', JSON.stringify({
+            membershipId: destiny2Membership.membershipId,
+            membershipType: destiny2Membership.membershipType
+        }));
+        
+        return destiny2Membership;
     } catch (error) {
         console.error('获取用户信息失败:', error);
         throw error;
@@ -185,44 +223,72 @@ function getMembershipTypeName(membershipType) {
 
 // 更新登录后的UI
 function updateUIAfterLogin() {
-    loginSection.style.display = 'none';
-    userInfoSection.style.display = 'block';
-    raidStatsSection.style.display = 'block';
+    console.log('更新UI为登录后状态');
+    if (loginSection) loginSection.style.display = 'none';
+    if (userInfoSection) userInfoSection.style.display = 'block';
+    if (raidStatsSection) raidStatsSection.style.display = 'block';
 }
 
 // 恢复登录前的UI
 function updateUIBeforeLogin() {
-    loginSection.style.display = 'block';
-    userInfoSection.style.display = 'none';
-    raidStatsSection.style.display = 'none';
+    console.log('更新UI为登录前状态');
+    if (loginSection) loginSection.style.display = 'block';
+    if (userInfoSection) userInfoSection.style.display = 'none';
+    if (raidStatsSection) raidStatsSection.style.display = 'none';
 }
 
 // 显示/隐藏加载指示器
 function showLoading(show) {
-    loadingOverlay.style.display = show ? 'flex' : 'none';
+    console.log(`显示加载状态: ${show}`);
+    if (loadingOverlay) {
+        loadingOverlay.style.display = show ? 'flex' : 'none';
+    }
+}
+
+// 显示错误消息
+function showErrorMessage(message) {
+    console.error(`显示错误消息: ${message}`);
+    
+    // 检查是否已经有错误消息元素
+    let errorElement = document.getElementById('error-message');
+    
+    if (!errorElement) {
+        // 创建错误消息元素
+        errorElement = document.createElement('div');
+        errorElement.id = 'error-message';
+        errorElement.className = 'error-message';
+        document.body.insertBefore(errorElement, document.body.firstChild);
+    }
+    
+    // 设置错误消息内容
+    errorElement.textContent = message;
+    errorElement.style.display = 'block';
+    
+    // 5秒后自动隐藏错误消息
+    setTimeout(() => {
+        hideErrorMessage();
+    }, 10000); // 10秒后隐藏
+}
+
+// 隐藏错误消息
+function hideErrorMessage() {
+    const errorElement = document.getElementById('error-message');
+    if (errorElement) {
+        errorElement.style.display = 'none';
+    }
 }
 
 // 初始化应用
 function init() {
-    // 检查是否已有有效token
-    const tokenData = getStoredToken();
-    if (tokenData) {
-        showLoading(true);
-        
-        // 尝试使用已存储的token获取用户信息
-        fetchUserInfo()
-            .then(() => {
-                updateUIAfterLogin();
-                return fetchRaidData();
-            })
-            .catch(error => {
-                console.error('使用存储的token失败:', error);
-                clearToken();
-                updateUIBeforeLogin();
-            })
-            .finally(() => {
-                showLoading(false);
-            });
+    // 清除可能存在的旧数据，确保干净的登录状态
+    clearToken();
+    localStorage.removeItem('userMembership');
+    localStorage.removeItem('historicalRanks');
+    
+    // 检查DOM元素是否存在
+    if (!loginBtn || !logoutBtn || !loginSection || !userInfoSection) {
+        console.error('缺少必要的DOM元素');
+        return;
     }
     
     // 处理可能的授权回调
@@ -230,15 +296,21 @@ function init() {
     
     // 绑定登录按钮事件
     loginBtn.addEventListener('click', () => {
+        console.log('登录按钮被点击，跳转到Bungie授权页面');
         window.location.href = createAuthUrl();
     });
     
     // 绑定登出按钮事件
     logoutBtn.addEventListener('click', () => {
+        console.log('登出按钮被点击，清除用户数据');
         clearToken();
         localStorage.removeItem('userMembership');
+        localStorage.removeItem('historicalRanks');
         updateUIBeforeLogin();
     });
+    
+    // 初始显示登录界面
+    updateUIBeforeLogin();
 }
 
 // 定义Raid信息映射表
@@ -305,6 +377,7 @@ async function fetchRaidData() {
         // 为每个角色获取活动记录和成就
         let allActivityData = [];
         let allAchievements = {};
+        let hasSuccessfulData = false;
         
         for (const characterId of characters) {
             // 获取活动记录
@@ -312,6 +385,7 @@ async function fetchRaidData() {
                 const activityData = await getActivityHistory(membershipData.membershipId, membershipData.membershipType, characterId);
                 allActivityData = allActivityData.concat(activityData);
                 console.log(`角色 ${characterId} 获取到的活动记录数量:`, activityData.length);
+                hasSuccessfulData = true;
             } catch (err) {
                 console.error(`获取角色 ${characterId} 的活动记录失败:`, err);
             }
@@ -327,9 +401,15 @@ async function fetchRaidData() {
                     }
                 }
                 console.log(`角色 ${characterId} 获取到的成就数量:`, Object.keys(achievements).length);
+                hasSuccessfulData = true;
             } catch (err) {
                 console.error(`获取角色 ${characterId} 的成就数据失败:`, err);
             }
+        }
+        
+        // 检查是否有成功获取的数据
+        if (!hasSuccessfulData && allActivityData.length === 0 && Object.keys(allAchievements).length === 0) {
+            throw new Error('无法获取到任何角色的活动或成就数据');
         }
         
         // 处理和计算Raid数据
@@ -341,24 +421,39 @@ async function fetchRaidData() {
         // 显示数据
         displayRaidData(raidStats);
         
-        // 计算并显示排名（模拟）
+        // 计算并显示排名（基于实际数据）
         calculateAndDisplayRankings(raidStats);
         
     } catch (error) {
         console.error('获取Raid数据失败:', error);
         
-        // 显示错误信息和模拟数据
+        // 使用专门的错误消息函数显示全局错误
+        showErrorMessage(`数据获取失败: ${error.message}`);
+        
+        // 清除数据显示区域
         const fullClearsData = document.getElementById('full-clears-data');
         const speedrunData = document.getElementById('speedrun-data');
+        const totalFullClearsElement = document.getElementById('total-full-clears');
+        const totalSpeedrunTimeElement = document.getElementById('total-speedrun-time');
         
         if (fullClearsData && speedrunData) {
-            fullClearsData.innerHTML = `<p class="loading-message">获取数据时出错，显示模拟数据</p>`;
-            speedrunData.innerHTML = `<p class="loading-message">获取数据时出错，显示模拟数据</p>`;
+            fullClearsData.innerHTML = '';
+            speedrunData.innerHTML = '';
         }
         
-        // 直接调用显示模拟数据，不使用setTimeout延迟，确保即使API失败也能立即显示数据
-        console.log('API调用失败，切换到模拟数据模式');
-        displayMockData();
+        if (totalFullClearsElement && totalSpeedrunTimeElement) {
+            totalFullClearsElement.textContent = '0';
+            totalSpeedrunTimeElement.textContent = '-';
+        }
+        
+        // 显示排名错误
+        const rankFullClearsElement = document.getElementById('rank-full-clears');
+        const rankSpeedrunElement = document.getElementById('rank-speedrun');
+        
+        if (rankFullClearsElement && rankSpeedrunElement) {
+            rankFullClearsElement.textContent = '-';
+            rankSpeedrunElement.textContent = '-';
+        }
         
     } finally {
         showLoading(false);
@@ -367,6 +462,7 @@ async function fetchRaidData() {
 
 // 获取用户角色ID列表
 async function getCharacterIds(membershipId, membershipType) {
+    console.log(`开始获取角色信息，membershipId: ${membershipId}, membershipType: ${membershipType}`);
     const tokenData = getStoredToken();
     
     const response = await fetch(
@@ -379,13 +475,27 @@ async function getCharacterIds(membershipId, membershipType) {
         }
     );
     
+    console.log('角色信息请求响应状态:', response.status);
+    
     if (!response.ok) {
-        throw new Error('获取角色信息失败');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('获取角色信息失败:', errorData);
+        throw new Error(`获取角色信息失败: ${response.status} - ${errorData.Message || '权限不足或账号数据异常'}`);
     }
     
     const data = await response.json();
+    console.log('获取到的角色数据:', data.Response?.characters);
+    
+    if (!data.Response || !data.Response.characters || !data.Response.characters.data) {
+        console.error('未找到角色数据');
+        throw new Error('未找到角色数据');
+    }
+    
     const characters = data.Response.characters.data;
-    return Object.keys(characters);
+    const characterIds = Object.keys(characters);
+    console.log(`成功获取到 ${characterIds.length} 个角色ID`);
+    
+    return characterIds;
 }
 
 // 获取角色活动历史
@@ -561,31 +671,7 @@ function formatTime(seconds) {
     }
 }
 
-// 显示模拟数据（当API调用失败时使用）
-function displayMockData() {
-    // 添加调试日志
-    console.log('使用模拟数据显示Raid统计信息');
-    
-    const raidStats = {
-        fullClears: {
-            'Vault of Glass': 15,
-            'Deep Stone Crypt': 23,
-            'Garden of Salvation': 8,
-            'Last Wish': 12,
-            'Leviathan': 5
-        },
-        speedruns: {
-            'Vault of Glass': { count: 3, totalTime: 32*60 + 45, times: [32*60 + 45, 31*60 + 30, 33*60] },
-            'Deep Stone Crypt': { count: 2, totalTime: 45*60 + 12, times: [45*60 + 12, 44*60 + 50] },
-            'Garden of Salvation': { count: 1, totalTime: 38*60 + 20, times: [38*60 + 20] }
-        },
-        totalFullClears: 63,
-        totalSpeedrunTime: (32*60 + 45) + (45*60 + 12) + (38*60 + 20)
-    };
-    
-    displayRaidData(raidStats);
-    calculateAndDisplayRankings(raidStats);
-}
+// 不再需要模拟数据函数，API调用失败时直接显示错误信息
 
 // 显示Raid数据
 function displayRaidData(raidStats) {

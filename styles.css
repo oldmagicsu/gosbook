@@ -206,6 +206,17 @@ body {
     padding: 20px 0;
 }
 
+.error-message {
+    text-align: center;
+    color: #ff4757;
+    padding: 20px;
+    background: rgba(255, 71, 87, 0.1);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 71, 87, 0.2);
+    margin: 10px 0;
+    font-weight: 500;
+}
+
 .total-stats {
     display: flex;
     justify-content: space-between;
