@@ -1,21 +1,25 @@
 // Bungie API 配置
 const BUNGIE_API_KEY = '6d25ddf85f144bdf91f0ad85c78b6243';
 const CLIENT_ID = '51061';
-// 用户登录页面URL
-const SIGNIN_URL = 'https://www.bungie.net/7/zh-chs/User/SignIn';
 // OAuth授权URL（使用中文路径）
 const AUTH_URL = 'https://www.bungie.net/zh-chs/OAuth/Authorize';
 const REDIRECT_URI = window.location.origin + window.location.pathname;
 
-// DOM 元素
-const loginBtn = document.getElementById('login-btn');
-const logoutBtn = document.getElementById('logout-btn');
-const loginSection = document.getElementById('login-section');
-const userInfoSection = document.getElementById('user-info');
-const raidStatsSection = document.getElementById('raid-stats');
-const loadingOverlay = document.getElementById('loading-overlay');
-const userNameElement = document.getElementById('user-name');
-const userMembershipElement = document.getElementById('user-membership');
+// 全局错误处理
+window.onerror = function(message, source, lineno, colno, error) {
+    console.error('全局错误:', message, '行号:', lineno, '错误:', error);
+    return true;
+};
+
+// DOM 元素 - 初始为null，在DOM加载完成后再获取
+let loginBtn = null;
+let logoutBtn = null;
+let loginSection = null;
+let userInfoSection = null;
+let raidStatsSection = null;
+let loadingOverlay = null;
+let userNameElement = null;
+let userMembershipElement = null;
 
 // Token 管理函数
 function getStoredToken() {
@@ -60,19 +64,33 @@ function getUrlParams() {
     return params;
 }
 
-// 创建授权URL
+// 创建OAuth授权URL
 function createAuthUrl() {
+    console.log('创建OAuth授权URL...');
+    // 生成随机state参数防止CSRF攻击
     const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     localStorage.setItem('authState', state);
     
-    // 使用正确的OAuth授权URL，包含所有必要参数
-    const authUrl = `${AUTH_URL}?client_id=${CLIENT_ID}&response_type=code&state=${state}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
-    console.log('生成的OAuth授权URL:', authUrl);
-    return authUrl;
+    // 参数验证
+    if (!CLIENT_ID || !AUTH_URL || !REDIRECT_URI) {
+        throw new Error('缺少必要的OAuth配置参数');
+    }
+    
+    // 构建URL - 确保正确编码所有参数
+    const params = new URLSearchParams();
+    params.append('client_id', CLIENT_ID);
+    params.append('response_type', 'code');
+    params.append('state', state);
+    params.append('redirect_uri', REDIRECT_URI);
+    
+    const url = `${AUTH_URL}?${params.toString()}`;
+    console.log('创建的授权URL:', url);
+    return url;
 }
 
 // 处理授权回调
 async function handleAuthCallback() {
+    console.log('检查URL中是否包含授权码...');
     const params = getUrlParams();
     
     // 如果URL包含code参数，表示是从授权页面重定向回来的
@@ -88,6 +106,7 @@ async function handleAuthCallback() {
             localStorage.removeItem('authState');
             
             // 使用code换取token
+            console.log('使用授权码获取访问令牌...');
             const tokenResponse = await exchangeCodeForToken(params.code);
             
             if (tokenResponse.access_token) {
@@ -97,12 +116,17 @@ async function handleAuthCallback() {
                 window.history.replaceState({}, document.title, window.location.pathname);
                 
                 // 获取并显示用户信息
+                console.log('获取并显示用户信息...');
                 await fetchUserInfo();
+                
                 // 获取并显示Raid数据
+                console.log('获取并显示Raid数据...');
                 await fetchRaidData();
                 
                 // 显示用户信息和数据区域
+                console.log('更新UI为登录后状态');
                 updateUIAfterLogin();
+                console.log('登录成功！');
             } else {
                 throw new Error('未获取到有效的访问令牌');
             }
@@ -119,10 +143,8 @@ async function handleAuthCallback() {
             // 恢复登录前的UI状态
             updateUIBeforeLogin();
         } finally {
+            console.log('隐藏加载指示器');
             // 无论成功失败都隐藏加载指示器
-            showLoading(false);
-        }
-        } finally {
             showLoading(false);
         }
     }
@@ -289,58 +311,103 @@ function hideErrorMessage() {
 }
 
 // 初始化应用
+// 使用DOMContentLoaded事件确保DOM完全加载
 function init() {
-    // 检查是否有登录后的动作需要执行
-    const postLoginAction = localStorage.getItem('postLoginAction');
-    if (postLoginAction === 'oauth') {
-        console.log('检测到登录后需要执行OAuth授权');
-        localStorage.removeItem('postLoginAction');
-        // 登录后直接进行OAuth授权
-        const authUrl = createAuthUrl();
-        console.log('登录后重定向到OAuth授权:', authUrl);
-        window.location.href = authUrl;
+    console.log('DOMContentLoaded事件触发，开始初始化...');
+    
+    // 获取DOM元素
+    console.log('获取DOM元素...');
+    loginBtn = document.getElementById('login-btn');
+    logoutBtn = document.getElementById('logout-btn');
+    loginSection = document.getElementById('login-section');
+    userInfoSection = document.getElementById('user-info');
+    raidStatsSection = document.getElementById('raid-stats');
+    loadingOverlay = document.getElementById('loading-overlay');
+    userNameElement = document.getElementById('user-name');
+    userMembershipElement = document.getElementById('user-membership');
+    
+    // 详细检查DOM元素是否存在
+    console.log('检查DOM元素存在性:');
+    console.log('- loginBtn:', !!loginBtn);
+    console.log('- logoutBtn:', !!logoutBtn);
+    console.log('- loginSection:', !!loginSection);
+    console.log('- userInfoSection:', !!userInfoSection);
+    
+    // 检查DOM元素是否存在
+    if (!loginBtn) {
+        console.error('错误：找不到登录按钮元素');
+        // 创建临时错误显示元素
+        const errorElement = document.createElement('div');
+        errorElement.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; background: red; color: white; padding: 10px; text-align: center; z-index: 1000;';
+        errorElement.textContent = '错误：找不到登录按钮，请检查页面结构';
+        document.body.appendChild(errorElement);
         return;
     }
     
-    // 清除可能存在的旧数据，确保干净的登录状态
-    clearToken();
-    localStorage.removeItem('userMembership');
-    localStorage.removeItem('historicalRanks');
-    
-    // 检查DOM元素是否存在
-    if (!loginBtn || !logoutBtn || !loginSection || !userInfoSection) {
-        console.error('缺少必要的DOM元素');
-        return;
+    if (!logoutBtn || !loginSection || !userInfoSection) {
+        console.error('警告：缺少部分UI元素，但继续执行');
     }
     
     // 处理可能的授权回调
     handleAuthCallback();
     
-    // 绑定登录按钮事件
-    loginBtn.addEventListener('click', () => {
-        console.log('登录按钮被点击，准备跳转到Bungie登录页面');
-        try {
-            // 首先跳转到用户登录页面
-            console.log('即将跳转到Bungie登录页面:', SIGNIN_URL);
-            // 在登录后回调中会处理OAuth授权
-            localStorage.setItem('postLoginAction', 'oauth');
-            window.location.href = SIGNIN_URL;
-        } catch (error) {
-            console.error('跳转登录页面时出错:', error);
-            showErrorMessage('登录失败，请刷新页面重试');
-        }
-    });
+    // 清除可能存在的旧数据，确保干净的登录状态
+    clearToken();
+    localStorage.removeItem('userMembership');
+    localStorage.removeItem('historicalRanks');
+    localStorage.removeItem('postLoginAction');
     
-    // 绑定登出按钮事件
-    logoutBtn.addEventListener('click', () => {
-        console.log('登出按钮被点击，清除用户数据');
-        clearToken();
-        localStorage.removeItem('userMembership');
-        localStorage.removeItem('historicalRanks');
-        updateUIBeforeLogin();
-    });
+    // 独立的登录点击处理函数 - 简化为直接跳转到OAuth授权页面
+    const handleLoginClick = () => {
+        console.log('登录按钮被点击，准备跳转到OAuth授权页面');
+        try {
+            // 直接创建并跳转到OAuth授权URL
+            const authUrl = createAuthUrl();
+            console.log('即将跳转到OAuth授权页面:', authUrl);
+            window.location.href = authUrl;
+        } catch (error) {
+            console.error('创建授权URL时出错:', error);
+            // 使用alert作为备用错误提示
+            alert('登录失败：' + error.message);
+        }
+    };
+    
+    // 绑定登录按钮事件 - 添加错误处理
+    console.log('绑定登录按钮事件...');
+    try {
+        // 先移除可能存在的旧事件监听器
+        const newLoginBtn = loginBtn.cloneNode(true);
+        loginBtn.parentNode.replaceChild(newLoginBtn, loginBtn);
+        loginBtn = newLoginBtn;
+        
+        // 绑定新的事件监听器
+        loginBtn.addEventListener('click', handleLoginClick);
+        console.log('登录按钮事件绑定成功');
+        
+        // 添加视觉反馈
+        loginBtn.style.cursor = 'pointer';
+        loginBtn.addEventListener('mouseover', () => {
+            console.log('鼠标悬停在登录按钮上');
+        });
+    } catch (error) {
+        console.error('绑定登录按钮事件失败:', error);
+        alert('绑定登录事件失败，请刷新页面重试');
+    }
+    
+    // 绑定登出按钮事件（如果存在）
+    if (logoutBtn) {
+        console.log('绑定登出按钮事件...');
+        logoutBtn.addEventListener('click', () => {
+            console.log('登出按钮被点击，清除用户数据');
+            clearToken();
+            localStorage.removeItem('userMembership');
+            localStorage.removeItem('historicalRanks');
+            updateUIBeforeLogin();
+        });
+    }
     
     // 初始显示登录界面
+    console.log('初始显示登录界面...');
     updateUIBeforeLogin();
 }
 
@@ -907,5 +974,11 @@ function updateRankTrendIndicators(fullClearsRank, speedrunRank, historicalRanks
     speedrunTrend.textContent = speedrunTrendClass === 'trend-up' ? '↑' : '↓';
 }
 
-// 启动应用
-init();
+// 确保在DOM完全加载后初始化
+if (document.readyState === 'loading') {
+    console.log('DOM尚未加载完成，等待DOMContentLoaded事件...');
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    console.log('DOM已经加载完成，立即初始化...');
+    init();
+}
