@@ -295,8 +295,12 @@ async function fetchRaidData() {
             throw new Error('缺少必要的认证信息');
         }
         
+        // 添加调试日志
+        console.log('开始获取Raid数据，membershipId:', membershipData.membershipId);
+        
         // 获取用户角色信息
         const characters = await getCharacterIds(membershipData.membershipId, membershipData.membershipType);
+        console.log('获取到的角色数量:', characters.length);
         
         // 为每个角色获取活动记录和成就
         let allActivityData = [];
@@ -304,22 +308,35 @@ async function fetchRaidData() {
         
         for (const characterId of characters) {
             // 获取活动记录
-            const activityData = await getActivityHistory(membershipData.membershipId, membershipData.membershipType, characterId);
-            allActivityData = allActivityData.concat(activityData);
+            try {
+                const activityData = await getActivityHistory(membershipData.membershipId, membershipData.membershipType, characterId);
+                allActivityData = allActivityData.concat(activityData);
+                console.log(`角色 ${characterId} 获取到的活动记录数量:`, activityData.length);
+            } catch (err) {
+                console.error(`获取角色 ${characterId} 的活动记录失败:`, err);
+            }
             
             // 获取成就数据
-            const achievements = await getCharacterAchievements(membershipData.membershipId, membershipData.membershipType, characterId);
-            
-            // 合并成就数据
-            for (const [achievementHash, timestamp] of Object.entries(achievements)) {
-                if (!allAchievements[achievementHash] || timestamp > allAchievements[achievementHash]) {
-                    allAchievements[achievementHash] = timestamp;
+            try {
+                const achievements = await getCharacterAchievements(membershipData.membershipId, membershipData.membershipType, characterId);
+                
+                // 合并成就数据
+                for (const [achievementHash, timestamp] of Object.entries(achievements)) {
+                    if (!allAchievements[achievementHash] || timestamp > allAchievements[achievementHash]) {
+                        allAchievements[achievementHash] = timestamp;
+                    }
                 }
+                console.log(`角色 ${characterId} 获取到的成就数量:`, Object.keys(achievements).length);
+            } catch (err) {
+                console.error(`获取角色 ${characterId} 的成就数据失败:`, err);
             }
         }
         
         // 处理和计算Raid数据
         const raidStats = processRaidData(allActivityData, allAchievements);
+        
+        // 检查处理后的数据
+        console.log('处理后的Raid统计数据:', raidStats);
         
         // 显示数据
         displayRaidData(raidStats);
@@ -334,13 +351,14 @@ async function fetchRaidData() {
         const fullClearsData = document.getElementById('full-clears-data');
         const speedrunData = document.getElementById('speedrun-data');
         
-        fullClearsData.innerHTML = `<p class="loading-message">获取数据时出错，显示模拟数据</p>`;
-        speedrunData.innerHTML = `<p class="loading-message">获取数据时出错，显示模拟数据</p>`;
+        if (fullClearsData && speedrunData) {
+            fullClearsData.innerHTML = `<p class="loading-message">获取数据时出错，显示模拟数据</p>`;
+            speedrunData.innerHTML = `<p class="loading-message">获取数据时出错，显示模拟数据</p>`;
+        }
         
-        // 显示模拟数据
-        setTimeout(() => {
-            displayMockData();
-        }, 1000);
+        // 直接调用显示模拟数据，不使用setTimeout延迟，确保即使API失败也能立即显示数据
+        console.log('API调用失败，切换到模拟数据模式');
+        displayMockData();
         
     } finally {
         showLoading(false);
@@ -545,6 +563,9 @@ function formatTime(seconds) {
 
 // 显示模拟数据（当API调用失败时使用）
 function displayMockData() {
+    // 添加调试日志
+    console.log('使用模拟数据显示Raid统计信息');
+    
     const raidStats = {
         fullClears: {
             'Vault of Glass': 15,
@@ -554,9 +575,9 @@ function displayMockData() {
             'Leviathan': 5
         },
         speedruns: {
-            'Vault of Glass': { count: 3, totalTime: 32*60 + 45 },
-            'Deep Stone Crypt': { count: 2, totalTime: 45*60 + 12 },
-            'Garden of Salvation': { count: 1, totalTime: 38*60 + 20 }
+            'Vault of Glass': { count: 3, totalTime: 32*60 + 45, times: [32*60 + 45, 31*60 + 30, 33*60] },
+            'Deep Stone Crypt': { count: 2, totalTime: 45*60 + 12, times: [45*60 + 12, 44*60 + 50] },
+            'Garden of Salvation': { count: 1, totalTime: 38*60 + 20, times: [38*60 + 20] }
         },
         totalFullClears: 63,
         totalSpeedrunTime: (32*60 + 45) + (45*60 + 12) + (38*60 + 20)
@@ -568,8 +589,20 @@ function displayMockData() {
 
 // 显示Raid数据
 function displayRaidData(raidStats) {
+    // 添加调试日志
+    console.log('显示Raid数据:', raidStats);
+    
+    // 检查DOM元素是否存在
     const fullClearsData = document.getElementById('full-clears-data');
     const speedrunData = document.getElementById('speedrun-data');
+    const totalFullClearsElement = document.getElementById('total-full-clears');
+    const totalSpeedrunTimeElement = document.getElementById('total-speedrun-time');
+    
+    // 如果缺少必要的DOM元素，输出错误信息
+    if (!fullClearsData || !speedrunData || !totalFullClearsElement || !totalSpeedrunTimeElement) {
+        console.error('缺少必要的DOM元素');
+        return;
+    }
     
     // 构建Full Clears HTML
     let fullClearsHtml = '';
@@ -619,8 +652,8 @@ function displayRaidData(raidStats) {
     speedrunData.innerHTML = speedrunHtml;
     
     // 更新总计
-    document.getElementById('total-full-clears').textContent = raidStats.totalFullClears.toString();
-    document.getElementById('total-speedrun-time').textContent = formatTime(raidStats.totalSpeedrunTime);
+    totalFullClearsElement.textContent = raidStats.totalFullClears.toString();
+    totalSpeedrunTimeElement.textContent = formatTime(raidStats.totalSpeedrunTime);
 }
 
 // 计算并显示排名（改进的模拟版本）
