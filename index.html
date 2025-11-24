@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Destiny 2 Raid 数据统计</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Destiny 2 Raid 数据统计</h1>
+            <p class="subtitle">查看您的Raid成就和全球排名</p>
+        </header>
+        
+        <main class="main-content">
+            <!-- 登录区域 -->
+            <section id="login-section" class="login-section">
+                <button id="login-btn" class="login-button">
+                    使用 Bungie.net 账号登录
+                </button>
+                <p class="login-hint">登录后查看您的Raid数据</p>
+            </section>
+            
+            <!-- 用户信息区域 -->
+            <section id="user-info" class="user-info-section" style="display: none;">
+                <div class="user-profile">
+                    <div id="user-avatar" class="avatar-placeholder"></div>
+                    <div class="user-details">
+                        <h2 id="user-name">加载中...</h2>
+                        <p id="user-membership">加载中...</p>
+                    </div>
+                    <button id="logout-btn" class="logout-button">退出登录</button>
+                </div>
+            </section>
+            
+            <!-- 数据展示区域 -->
+            <section id="raid-stats" class="raid-stats-section" style="display: none;">
+                <!-- Full Clears 统计 -->
+                <div class="stats-card">
+                    <h3>Raid Full Clears</h3>
+                    <div id="full-clears-data" class="raid-data">
+                        <p class="loading-message">正在加载数据...</p>
+                    </div>
+                    <div class="total-stats">
+                        <p>总计：<span id="total-full-clears">0</span></p>
+                        <p>全球排名：<span id="rank-full-clears">--</span></p>
+                    </div>
+                </div>
+                
+                <!-- Speedrun 统计 -->
+                <div class="stats-card">
+                    <h3>Raid Speedrun Clears</h3>
+                    <div id="speedrun-data" class="raid-data">
+                        <p class="loading-message">正在加载数据...</p>
+                    </div>
+                    <div class="total-stats">
+                        <p>总时长：<span id="total-speedrun-time">0:00:00</span></p>
+                        <p>全球排名：<span id="rank-speedrun">--</span></p>
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <footer class="footer">
+            <p>数据由 Bungie API 提供</p>
+        </footer>
+    </div>
+    
+    <!-- 加载指示器 -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <p>加载中，请稍候...</p>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
