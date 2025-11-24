@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>花园之书</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- 主界面 -->
+    <div id="main-screen" class="main-screen">
+        <button id="garden-book-button" class="garden-book-button">
+            打开花园之书
+        </button>
+    </div>
+
+    <!-- 花园之书页面 -->
+    <div id="garden-book-page" class="garden-book-page hidden">
+        <div class="page-content">
+            <!-- 返回按钮 -->
+            <button id="back-button" class="back-button">← 返回</button>
+            
+            <!-- 配置内容区域（常驻显示） -->
+            <div id="config-area" class="config-area">
+                <h2>角色配置</h2>
+                <p id="selected-role-info">请选择一个角色查看配置</p>
+            </div>
+            
+            <!-- 角色按钮环形区域 -->
+            <div class="circular-buttons-container">
+                <button id="role-h1" class="character-button" data-role="h1">h1</button>
+                <button id="role-h2" class="character-button" data-role="h2">h2</button>
+                <button id="role-h3" class="character-button" data-role="h3">h3</button>
+                <button id="role-h4" class="character-button" data-role="h4">h4</button>
+                <button id="role-h12" class="character-button" data-role="h12">h12</button>
+                <button id="role-w34" class="character-button" data-role="w34">w34</button>
+            </div>
+            
+            <!-- 关卡策略卡片区域 -->
+            <div id="strategy-area" class="strategy-area hidden">
+                <h3>关卡策略</h3>
+                <div class="strategy-cards">
+                    <div class="strategy-card">
+                        <h4>老一</h4>
+                        <p id="boss1-strategy">请选择角色查看策略</p>
+                    </div>
+                    <div class="strategy-card">
+                        <h4>老二</h4>
+                        <p id="boss2-strategy">请选择角色查看策略</p>
+                    </div>
+                    <div class="strategy-card">
+                        <h4>老三</h4>
+                        <p id="boss3-strategy">请选择角色查看策略</p>
+                    </div>
+                    <div class="strategy-card">
+                        <h4>尾王</h4>
+                        <p id="boss4-strategy">请选择角色查看策略</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

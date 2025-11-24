@@ -1,0 +1,263 @@
+/* 全局样式重置 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f5f5f5;
+    color: #333;
+}
+
+/* 主界面样式 */
+.main-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background-color: #f5f5f5;
+    z-index: 100;
+}
+
+.main-screen h1 {
+    margin-bottom: 30px;
+    color: #4a6fa5;
+    font-size: 2.5rem;
+}
+
+.garden-book-button {
+    padding: 15px 30px;
+    font-size: 1.2rem;
+    background-color: #4a6fa5;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.garden-book-button:hover {
+    background-color: #3a5a7a;
+}
+
+/* 页面切换样式 */
+.garden-book-page {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: white;
+    z-index: 1000;
+    display: block;
+    overflow-y: auto;
+}
+
+.garden-book-page.hidden {
+    display: none;
+}
+
+.page-content {
+    padding: 30px;
+    max-width: 1200px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* 返回按钮 */
+.back-button {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    font-size: 1.1rem;
+    background-color: #4a6fa5;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.back-button:hover {
+    background-color: #3a5a7a;
+}
+
+/* 配置内容区域 */
+.config-area {
+    text-align: center;
+    margin-bottom: 40px;
+    padding: 30px;
+    background: linear-gradient(135deg, #f9f9f9 0%, #e9f0f5 100%);
+    border-radius: 15px;
+    width: 100%;
+    max-width: 800px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+    border: 2px solid #7ea8be;
+}
+
+.config-area h2 {
+    color: #4a6fa5;
+    margin-bottom: 20px;
+    font-size: 1.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid #7ea8be;
+    display: inline-block;
+}
+
+#selected-role-info {
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: #333;
+    padding: 20px;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 10px;
+    min-height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: left;
+}
+
+/* 环形按钮容器 */
+.circular-buttons-container {
+    position: relative;
+    width: 400px;
+    height: 400px;
+    margin: 40px 0;
+}
+
+/* 角色按钮 */
+.character-button {
+    position: absolute;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background-color: #7ea8be;
+    color: white;
+    border: none;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.character-button:hover {
+    background-color: #5a8a9e;
+    transform: scale(1.1);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+}
+
+.character-button.selected {
+    background-color: #4a6fa5;
+    transform: scale(1.15);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* 环形排列计算 */
+#role-h1 { top: 0; left: 50%; transform: translateX(-50%); }
+#role-h2 { top: 25%; right: 15%; }
+#role-h3 { bottom: 25%; right: 15%; }
+#role-h4 { bottom: 0; left: 50%; transform: translateX(-50%); }
+#role-h12 { bottom: 25%; left: 15%; }
+#role-w34 { top: 25%; left: 15%; }
+
+/* 策略卡片区域 */
+.strategy-area {
+    margin-top: 60px;
+    width: 100%;
+    max-width: 1000px;
+    padding: 20px;
+    background: linear-gradient(135deg, #f9f9f9 0%, #e9f0f5 100%);
+    border-radius: 15px;
+    border: 2px solid #7ea8be;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+.strategy-area.hidden {
+    display: none;
+}
+
+.strategy-area h3 {
+    text-align: center;
+    color: #4a6fa5;
+    margin-bottom: 30px;
+    font-size: 1.6rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid #7ea8be;
+    display: inline-block;
+    width: 100%;
+}
+
+.strategy-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 25px;
+}
+
+.strategy-card {
+    background-color: white;
+    border-radius: 12px;
+    padding: 25px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    border: 1px solid #ddd;
+}
+
+.strategy-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+    border-color: #7ea8be;
+}
+
+.strategy-card h4 {
+    color: #4a6fa5;
+    margin-bottom: 15px;
+    font-size: 1.3rem;
+    border-bottom: 2px solid #7ea8be;
+    padding-bottom: 8px;
+    text-align: center;
+}
+
+.strategy-card p {
+    color: #333;
+    line-height: 1.6;
+    font-size: 1rem;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .circular-buttons-container {
+        width: 300px;
+        height: 300px;
+    }
+    
+    .character-button {
+        width: 60px;
+        height: 60px;
+        font-size: 0.9rem;
+    }
+    
+    .strategy-cards {
+        grid-template-columns: 1fr;
+    }
+}
